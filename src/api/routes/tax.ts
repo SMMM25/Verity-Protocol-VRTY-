@@ -1,16 +1,18 @@
 /**
  * Verity Protocol - Tax Routes
- * Auto-Tax™ compliance engine endpoints
+ * Auto-Tax™ compliance engine endpoints with 200+ jurisdiction support
  */
 
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
+import { getTaxEngine } from '../services.js';
+import { logger } from '../../utils/logger.js';
 
 const router = Router();
 
 // Validation schemas
 const taxProfileSchema = z.object({
-  taxResidence: z.string(),
+  taxResidence: z.string().length(2),
   taxId: z.string().optional(),
   costBasisMethod: z.enum(['FIFO', 'LIFO', 'HIFO', 'SPECIFIC_ID', 'AVERAGE']),
   treatyBenefits: z.array(z.string()).optional(),
@@ -24,7 +26,7 @@ const transactionSchema = z.object({
   pricePerUnit: z.string(),
   totalValue: z.string(),
   fee: z.string().optional(),
-  timestamp: z.string().datetime(),
+  timestamp: z.string(),
   transactionHash: z.string(),
 });
 
@@ -34,25 +36,65 @@ const transactionSchema = z.object({
  */
 router.post('/calculate', async (req: Request, res: Response) => {
   try {
-    const { transaction, profile } = req.body;
+    const { transaction, userId } = req.body;
 
-    if (!transaction || !profile) {
-      res.status(400).json({
+    if (!transaction || !userId) {
+      return res.status(400).json({
         success: false,
         error: {
           code: 'VALIDATION_ERROR',
-          message: 'Transaction and profile are required',
+          message: 'Transaction and userId are required',
         },
       });
-      return;
     }
+
+    const validatedTx = transactionSchema.parse(transaction);
+    const taxEngine = getTaxEngine();
+
+    // Check if user has a profile
+    const profile = taxEngine.getTaxProfile(userId);
+    if (!profile) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'PROFILE_NOT_FOUND',
+          message: 'Tax profile not found. Create a profile first.',
+        },
+      });
+    }
+
+    // Record the transaction
+    const recordedTx = taxEngine.recordTransaction(userId, {
+      type: validatedTx.type,
+      asset: validatedTx.asset,
+      amount: validatedTx.amount,
+      pricePerUnit: validatedTx.pricePerUnit,
+      totalValue: validatedTx.totalValue,
+      fee: validatedTx.fee,
+      timestamp: new Date(validatedTx.timestamp),
+      transactionHash: validatedTx.transactionHash,
+    });
+
+    // Calculate tax
+    const taxCalculation = taxEngine.calculateVerifiedTransactionTax(userId, recordedTx);
 
     res.json({
       success: true,
       data: {
-        message: 'Tax calculation requires user profile in database',
-        transaction,
-        profile,
+        calculation: {
+          transactionId: taxCalculation.transactionId,
+          transactionType: taxCalculation.transactionType,
+          proceeds: taxCalculation.proceeds,
+          costBasis: taxCalculation.costBasis,
+          gainLoss: taxCalculation.gainLoss,
+          taxableAmount: taxCalculation.taxableAmount,
+          taxRate: taxCalculation.taxRate,
+          taxOwed: taxCalculation.taxOwed,
+          jurisdiction: taxCalculation.jurisdiction,
+          methodology: taxCalculation.methodology,
+          calculatedAt: taxCalculation.calculatedAt,
+        },
+        transaction: recordedTx,
       },
       meta: {
         requestId: req.requestId,
@@ -61,7 +103,7 @@ router.post('/calculate', async (req: Request, res: Response) => {
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      res.status(400).json({
+      return res.status(400).json({
         success: false,
         error: {
           code: 'VALIDATION_ERROR',
@@ -69,9 +111,15 @@ router.post('/calculate', async (req: Request, res: Response) => {
           details: error.errors,
         },
       });
-      return;
     }
-    throw error;
+    logger.error('Tax calculation error:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        code: 'CALCULATION_FAILED',
+        message: (error as Error).message || 'Tax calculation failed',
+      },
+    });
   }
 });
 
@@ -81,14 +129,54 @@ router.post('/calculate', async (req: Request, res: Response) => {
  */
 router.post('/profile', async (req: Request, res: Response) => {
   try {
+    const { userId } = req.body;
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'userId is required',
+        },
+      });
+    }
+
     const validatedData = taxProfileSchema.parse(req.body);
+    const taxEngine = getTaxEngine();
+
+    // Verify jurisdiction is supported
+    const jurisdictionRules = taxEngine.getJurisdictionRules(validatedData.taxResidence);
+    if (!jurisdictionRules) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'INVALID_JURISDICTION',
+          message: `Jurisdiction ${validatedData.taxResidence} is not supported`,
+        },
+      });
+    }
+
+    const profile = taxEngine.setTaxProfile(userId, {
+      taxResidence: validatedData.taxResidence,
+      taxId: validatedData.taxId,
+      costBasisMethod: validatedData.costBasisMethod,
+      treatyBenefits: validatedData.treatyBenefits,
+    });
 
     res.status(201).json({
       success: true,
       data: {
         profile: {
-          userId: req.userId || 'anonymous',
-          ...validatedData,
+          userId: profile.userId,
+          taxResidence: profile.taxResidence,
+          taxId: profile.taxId,
+          costBasisMethod: profile.costBasisMethod,
+          treatyBenefits: profile.treatyBenefits,
+          jurisdiction: {
+            code: jurisdictionRules.code,
+            name: jurisdictionRules.name,
+            shortTermRate: jurisdictionRules.shortTermRate,
+            longTermRate: jurisdictionRules.longTermRate,
+          },
         },
       },
       meta: {
@@ -98,7 +186,7 @@ router.post('/profile', async (req: Request, res: Response) => {
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      res.status(400).json({
+      return res.status(400).json({
         success: false,
         error: {
           code: 'VALIDATION_ERROR',
@@ -106,125 +194,161 @@ router.post('/profile', async (req: Request, res: Response) => {
           details: error.errors,
         },
       });
-      return;
     }
-    throw error;
+    logger.error('Profile creation error:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        code: 'PROFILE_FAILED',
+        message: (error as Error).message || 'Failed to create profile',
+      },
+    });
   }
 });
 
 /**
- * GET /tax/profile
+ * GET /tax/profile/:userId
  * Get user's tax profile
  */
-router.get('/profile', async (req: Request, res: Response) => {
-  res.json({
-    success: true,
-    data: {
-      profile: null,
-      message: 'Profile requires database connection',
-    },
-    meta: {
-      requestId: req.requestId,
-      timestamp: new Date(),
-    },
-  });
-});
-
-/**
- * POST /tax/transactions
- * Record a transaction for tax tracking
- */
-router.post('/transactions', async (req: Request, res: Response) => {
+router.get('/profile/:userId', async (req: Request, res: Response) => {
   try {
-    const validatedData = transactionSchema.parse(req.body);
+    const { userId } = req.params;
+    const taxEngine = getTaxEngine();
 
-    res.status(201).json({
-      success: true,
-      data: {
-        transaction: {
-          id: `TX_${Date.now()}`,
-          ...validatedData,
+    const profile = taxEngine.getTaxProfile(userId);
+
+    if (!profile) {
+      return res.status(404).json({
+        success: false,
+        error: {
+          code: 'NOT_FOUND',
+          message: `Tax profile for user ${userId} not found`,
         },
-      },
+      });
+    }
+
+    res.json({
+      success: true,
+      data: { profile },
       meta: {
         requestId: req.requestId,
         timestamp: new Date(),
       },
     });
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      res.status(400).json({
-        success: false,
-        error: {
-          code: 'VALIDATION_ERROR',
-          message: 'Invalid request data',
-          details: error.errors,
-        },
-      });
-      return;
-    }
-    throw error;
+    logger.error('Profile fetch error:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: 'Failed to fetch profile',
+      },
+    });
   }
 });
 
 /**
- * GET /tax/transactions
+ * GET /tax/transactions/:userId
  * Get user's transactions
  */
-router.get('/transactions', async (req: Request, res: Response) => {
-  const { taxYear, asset, page = '1', limit = '50' } = req.query;
+router.get('/transactions/:userId', async (req: Request, res: Response) => {
+  try {
+    const { userId } = req.params;
+    const { taxYear, asset, page = '1', limit = '50' } = req.query;
 
-  res.json({
-    success: true,
-    data: {
-      transactions: [],
-      filters: { taxYear, asset },
-    },
-    meta: {
-      requestId: req.requestId,
-      timestamp: new Date(),
-      pagination: {
-        page: parseInt(page as string, 10),
-        pageSize: parseInt(limit as string, 10),
-        totalItems: 0,
-        totalPages: 0,
-        hasNext: false,
-        hasPrevious: false,
+    const taxEngine = getTaxEngine();
+    let transactions = taxEngine.getUserTransactions(userId);
+
+    // Filter by tax year if provided
+    if (taxYear) {
+      const year = parseInt(taxYear as string, 10);
+      transactions = transactions.filter(
+        (tx) => tx.timestamp.getFullYear() === year
+      );
+    }
+
+    // Filter by asset if provided
+    if (asset) {
+      transactions = transactions.filter((tx) => tx.asset === asset);
+    }
+
+    // Pagination
+    const pageNum = parseInt(page as string, 10);
+    const limitNum = parseInt(limit as string, 10);
+    const startIndex = (pageNum - 1) * limitNum;
+    const paginatedTxs = transactions.slice(startIndex, startIndex + limitNum);
+
+    res.json({
+      success: true,
+      data: {
+        transactions: paginatedTxs,
+        filters: { taxYear, asset },
       },
-    },
-  });
+      meta: {
+        requestId: req.requestId,
+        timestamp: new Date(),
+        pagination: {
+          page: pageNum,
+          pageSize: limitNum,
+          totalItems: transactions.length,
+          totalPages: Math.ceil(transactions.length / limitNum),
+          hasNext: startIndex + limitNum < transactions.length,
+          hasPrevious: pageNum > 1,
+        },
+      },
+    });
+  } catch (error) {
+    logger.error('Transactions fetch error:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: 'Failed to fetch transactions',
+      },
+    });
+  }
 });
 
 /**
- * GET /tax/summary/:taxYear
+ * GET /tax/summary/:userId/:taxYear
  * Get tax summary for a year
  */
-router.get('/summary/:taxYear', async (req: Request, res: Response) => {
-  const { taxYear } = req.params;
+router.get('/summary/:userId/:taxYear', async (req: Request, res: Response) => {
+  try {
+    const { userId, taxYear } = req.params;
+    const taxEngine = getTaxEngine();
 
-  res.json({
-    success: true,
-    data: {
-      taxYear: parseInt(taxYear, 10),
-      summary: {
-        totalTransactions: 0,
-        totalProceeds: '0',
-        totalCostBasis: '0',
-        shortTermGains: '0',
-        shortTermLosses: '0',
-        longTermGains: '0',
-        longTermLosses: '0',
-        netGainLoss: '0',
-        dividendIncome: '0',
-        stakingIncome: '0',
-        estimatedTax: '0',
+    const profile = taxEngine.getTaxProfile(userId);
+    if (!profile) {
+      return res.status(404).json({
+        success: false,
+        error: {
+          code: 'PROFILE_NOT_FOUND',
+          message: `Tax profile for user ${userId} not found`,
+        },
+      });
+    }
+
+    const summary = taxEngine.getTaxSummary(userId, parseInt(taxYear, 10));
+
+    res.json({
+      success: true,
+      data: { summary },
+      meta: {
+        requestId: req.requestId,
+        timestamp: new Date(),
       },
-    },
-    meta: {
-      requestId: req.requestId,
-      timestamp: new Date(),
-    },
-  });
+    });
+  } catch (error) {
+    logger.error('Summary fetch error:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: (error as Error).message || 'Failed to fetch summary',
+      },
+    });
+  }
 });
 
 /**
@@ -232,120 +356,248 @@ router.get('/summary/:taxYear', async (req: Request, res: Response) => {
  * Generate tax report
  */
 router.post('/report/generate', async (req: Request, res: Response) => {
-  const { taxYear, format = 'GENERIC' } = req.body;
+  try {
+    const { userId, taxYear, format = 'GENERIC' } = req.body;
 
-  if (!taxYear) {
-    res.status(400).json({
-      success: false,
-      error: {
-        code: 'VALIDATION_ERROR',
-        message: 'Tax year is required',
+    if (!userId || !taxYear) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'userId and taxYear are required',
+        },
+      });
+    }
+
+    const taxEngine = getTaxEngine();
+    const report = taxEngine.generateTaxReport(
+      userId,
+      taxYear,
+      format as 'IRS_8949' | 'HMRC' | 'GENERIC'
+    );
+
+    res.json({
+      success: true,
+      data: { report },
+      meta: {
+        requestId: req.requestId,
+        timestamp: new Date(),
       },
     });
-    return;
+  } catch (error) {
+    logger.error('Report generation error:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        code: 'REPORT_FAILED',
+        message: (error as Error).message || 'Failed to generate report',
+      },
+    });
   }
-
-  res.json({
-    success: true,
-    data: {
-      taxYear,
-      format,
-      message: 'Report generation requires database connection',
-    },
-    meta: {
-      requestId: req.requestId,
-      timestamp: new Date(),
-    },
-  });
 });
 
 /**
  * GET /tax/jurisdictions
- * Get supported jurisdictions
+ * Get all supported jurisdictions (200+)
  */
 router.get('/jurisdictions', async (req: Request, res: Response) => {
-  res.json({
-    success: true,
-    data: {
-      jurisdictions: [
-        { code: 'US', name: 'United States' },
-        { code: 'GB', name: 'United Kingdom' },
-        { code: 'DE', name: 'Germany' },
-        { code: 'SG', name: 'Singapore' },
-        { code: 'JP', name: 'Japan' },
-        { code: 'CH', name: 'Switzerland' },
-        { code: 'AE', name: 'United Arab Emirates' },
-      ],
-    },
-    meta: {
-      requestId: req.requestId,
-      timestamp: new Date(),
-    },
-  });
+  try {
+    const { region, taxFriendly } = req.query;
+    const taxEngine = getTaxEngine();
+
+    let jurisdictions;
+
+    if (taxFriendly === 'true') {
+      jurisdictions = taxEngine.getTaxFriendlyJurisdictions().map((j) => ({
+        code: j.code,
+        name: j.name,
+        region: j.region,
+        shortTermRate: j.shortTermRate,
+        longTermRate: j.longTermRate,
+      }));
+    } else if (region) {
+      jurisdictions = taxEngine.getJurisdictionsByRegion(region as string).map((j) => ({
+        code: j.code,
+        name: j.name,
+        region: j.region,
+        shortTermRate: j.shortTermRate,
+        longTermRate: j.longTermRate,
+      }));
+    } else {
+      jurisdictions = taxEngine.getSupportedJurisdictions();
+    }
+
+    res.json({
+      success: true,
+      data: {
+        jurisdictions,
+        totalCount: taxEngine.getJurisdictionCount(),
+        regions: [
+          'North America',
+          'Europe',
+          'Asia-Pacific',
+          'Middle East',
+          'Africa',
+          'Latin America',
+          'Caribbean',
+          'Central Asia',
+          'Caucasus',
+          'Oceania',
+        ],
+      },
+      meta: {
+        requestId: req.requestId,
+        timestamp: new Date(),
+      },
+    });
+  } catch (error) {
+    logger.error('Jurisdictions fetch error:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: 'Failed to fetch jurisdictions',
+      },
+    });
+  }
 });
 
 /**
  * GET /tax/jurisdictions/:code
- * Get jurisdiction rules (transparent methodology)
+ * Get detailed jurisdiction rules (transparent methodology)
  */
 router.get('/jurisdictions/:code', async (req: Request, res: Response) => {
-  const { code } = req.params;
+  try {
+    const { code } = req.params;
+    const taxEngine = getTaxEngine();
 
-  // Mock jurisdiction rules
-  const rules: Record<string, unknown> = {
-    US: {
-      code: 'US',
-      name: 'United States',
-      shortTermRate: 37,
-      longTermRate: 20,
-      longTermThresholdDays: 365,
-      dividendRate: 20,
-    },
-    GB: {
-      code: 'GB',
-      name: 'United Kingdom',
-      shortTermRate: 20,
-      longTermRate: 20,
-      longTermThresholdDays: 0,
-      dividendRate: 33.75,
-    },
-    DE: {
-      code: 'DE',
-      name: 'Germany',
-      shortTermRate: 0,
-      longTermRate: 0,
-      longTermThresholdDays: 365,
-      dividendRate: 25,
-      cryptoSpecificRules: {
-        holdingPeriodExemption: true,
-        exemptionDays: 365,
+    const rules = taxEngine.getJurisdictionRules(code.toUpperCase());
+
+    if (!rules) {
+      return res.status(404).json({
+        success: false,
+        error: {
+          code: 'NOT_FOUND',
+          message: `Jurisdiction ${code} not found`,
+          suggestion: 'Use GET /tax/jurisdictions to see all supported jurisdictions',
+        },
+      });
+    }
+
+    res.json({
+      success: true,
+      data: {
+        rules: {
+          code: rules.code,
+          name: rules.name,
+          region: rules.region,
+          shortTermRate: rules.shortTermRate,
+          longTermRate: rules.longTermRate,
+          longTermThresholdDays: rules.longTermThresholdDays,
+          dividendRate: rules.dividendRate,
+          cryptoSpecificRules: rules.cryptoSpecificRules,
+          treatyPartners: rules.treatyPartners,
+          currency: rules.currency,
+          notes: rules.notes,
+        },
+        transparency: {
+          methodology: 'Rates are simplified representations. Actual rates vary by income bracket, filing status, and exemptions.',
+          disclaimer: 'Consult a qualified tax professional for specific advice.',
+          lastUpdated: '2024-01-01',
+        },
       },
-    },
-  };
-
-  const jurisdictionRules = rules[code.toUpperCase()];
-
-  if (!jurisdictionRules) {
-    res.status(404).json({
-      success: false,
-      error: {
-        code: 'NOT_FOUND',
-        message: `Jurisdiction ${code} not found`,
+      meta: {
+        requestId: req.requestId,
+        timestamp: new Date(),
       },
     });
-    return;
+  } catch (error) {
+    logger.error('Jurisdiction rules fetch error:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: 'Failed to fetch jurisdiction rules',
+      },
+    });
   }
+});
 
-  res.json({
-    success: true,
-    data: {
-      rules: jurisdictionRules,
-    },
-    meta: {
-      requestId: req.requestId,
-      timestamp: new Date(),
-    },
-  });
+/**
+ * GET /tax/jurisdictions/treaty/:code
+ * Get jurisdictions with tax treaty to specified country
+ */
+router.get('/jurisdictions/treaty/:code', async (req: Request, res: Response) => {
+  try {
+    const { code } = req.params;
+    const taxEngine = getTaxEngine();
+
+    const treatyJurisdictions = taxEngine.getJurisdictionsWithTreaty(code.toUpperCase());
+
+    res.json({
+      success: true,
+      data: {
+        baseCountry: code.toUpperCase(),
+        treatyPartners: treatyJurisdictions.map((j) => ({
+          code: j.code,
+          name: j.name,
+          region: j.region,
+        })),
+        totalPartners: treatyJurisdictions.length,
+      },
+      meta: {
+        requestId: req.requestId,
+        timestamp: new Date(),
+      },
+    });
+  } catch (error) {
+    logger.error('Treaty fetch error:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: 'Failed to fetch treaty partners',
+      },
+    });
+  }
+});
+
+/**
+ * GET /tax/holding-period-exemptions
+ * Get jurisdictions with holding period exemptions (0% after N days)
+ */
+router.get('/holding-period-exemptions', async (req: Request, res: Response) => {
+  try {
+    const taxEngine = getTaxEngine();
+    const exemptJurisdictions = taxEngine.getHoldingPeriodExemptionJurisdictions();
+
+    res.json({
+      success: true,
+      data: {
+        jurisdictions: exemptJurisdictions.map((j) => ({
+          code: j.code,
+          name: j.name,
+          region: j.region,
+          exemptionDays: j.cryptoSpecificRules?.exemptionDays || j.longTermThresholdDays,
+          notes: j.notes,
+        })),
+        count: exemptJurisdictions.length,
+      },
+      meta: {
+        requestId: req.requestId,
+        timestamp: new Date(),
+      },
+    });
+  } catch (error) {
+    logger.error('Exemptions fetch error:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: 'Failed to fetch exemption jurisdictions',
+      },
+    });
+  }
 });
 
 /**
@@ -353,45 +605,112 @@ router.get('/jurisdictions/:code', async (req: Request, res: Response) => {
  * Get calculation methodology documentation
  */
 router.get('/methodology', async (req: Request, res: Response) => {
-  res.json({
-    success: true,
-    data: {
-      version: '1.0.0',
-      description: 'Verity Auto-Tax Calculation Methodology',
-      supportedMethods: ['FIFO', 'LIFO', 'HIFO', 'AVERAGE', 'SPECIFIC_ID'],
-      transactionTypes: [
-        { type: 'CAPITAL_GAIN', description: 'Profit from selling assets above cost basis' },
-        { type: 'CAPITAL_LOSS', description: 'Loss from selling assets below cost basis' },
-        { type: 'DIVIDEND_INCOME', description: 'Income from asset dividends' },
-        { type: 'ORDINARY_INCOME', description: 'Income from staking rewards, airdrops, etc.' },
-        { type: 'NON_TAXABLE', description: 'Transfers and purchases (no taxable event)' },
-      ],
-      disclaimer: 'Tax calculations are provided for informational purposes only. Consult a tax professional for advice.',
-      transparency: 'All calculations are logged to an immutable audit ledger with verification hashes.',
-    },
-    meta: {
-      requestId: req.requestId,
-      timestamp: new Date(),
-    },
-  });
+  try {
+    const taxEngine = getTaxEngine();
+    const methodology = taxEngine.getMethodologyDocumentation();
+
+    res.json({
+      success: true,
+      data: {
+        ...methodology,
+        supportedJurisdictions: taxEngine.getJurisdictionCount(),
+        features: {
+          costBasisMethods: ['FIFO', 'LIFO', 'HIFO', 'SPECIFIC_ID', 'AVERAGE'],
+          holdingPeriodTracking: true,
+          washSaleDetection: true,
+          treatyBenefitCalculation: true,
+          auditTrailGeneration: true,
+          multiJurisdictionSupport: true,
+        },
+      },
+      meta: {
+        requestId: req.requestId,
+        timestamp: new Date(),
+      },
+    });
+  } catch (error) {
+    logger.error('Methodology fetch error:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: 'Failed to fetch methodology',
+      },
+    });
+  }
 });
 
 /**
- * GET /tax/audit
+ * GET /tax/audit/:userId
  * Get audit ledger for user
  */
-router.get('/audit', async (req: Request, res: Response) => {
-  res.json({
-    success: true,
-    data: {
-      auditLedger: [],
-      message: 'Audit ledger requires database connection',
-    },
-    meta: {
-      requestId: req.requestId,
-      timestamp: new Date(),
-    },
-  });
+router.get('/audit/:userId', async (req: Request, res: Response) => {
+  try {
+    const { userId } = req.params;
+    const taxEngine = getTaxEngine();
+
+    const auditLedger = taxEngine.getAuditLedger(userId);
+
+    res.json({
+      success: true,
+      data: {
+        userId,
+        auditLedger,
+        entryCount: auditLedger.length,
+      },
+      meta: {
+        requestId: req.requestId,
+        timestamp: new Date(),
+      },
+    });
+  } catch (error) {
+    logger.error('Audit ledger fetch error:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: 'Failed to fetch audit ledger',
+      },
+    });
+  }
+});
+
+/**
+ * GET /tax/cost-basis/:userId/:asset
+ * Get cost basis lots for user's asset
+ */
+router.get('/cost-basis/:userId/:asset', async (req: Request, res: Response) => {
+  try {
+    const { userId, asset } = req.params;
+    const taxEngine = getTaxEngine();
+
+    const lots = taxEngine.getCostBasisLots(userId, asset);
+
+    res.json({
+      success: true,
+      data: {
+        userId,
+        asset,
+        lots,
+        totalLots: lots.length,
+        totalAmount: lots.reduce((sum, lot) => sum + parseFloat(lot.amount), 0).toString(),
+        totalCostBasis: lots.reduce((sum, lot) => sum + parseFloat(lot.costBasis), 0).toFixed(2),
+      },
+      meta: {
+        requestId: req.requestId,
+        timestamp: new Date(),
+      },
+    });
+  } catch (error) {
+    logger.error('Cost basis fetch error:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: 'Failed to fetch cost basis',
+      },
+    });
+  }
 });
 
 export { router as taxRoutes };
