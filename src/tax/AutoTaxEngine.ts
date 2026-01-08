@@ -13,92 +13,19 @@ import type {
   TaxReport,
   CostBasisMethod,
 } from '../types/index.js';
+import {
+  JURISDICTION_RULES,
+  JurisdictionRules,
+  getSupportedJurisdictions,
+  getJurisdictionByCode,
+  getJurisdictionsByRegion,
+  getTaxFriendlyJurisdictions,
+  getHoldingPeriodExemptionJurisdictions,
+  getJurisdictionsWithTreaty,
+} from './jurisdictions.js';
 
-// Simplified tax rules for demonstration
-// In production, this would be a comprehensive database
-export interface JurisdictionRules {
-  code: string;
-  name: string;
-  shortTermRate: number; // Percentage
-  longTermRate: number;
-  longTermThresholdDays: number;
-  dividendRate: number;
-  cryptoSpecificRules?: Record<string, unknown>;
-  treatyPartners: string[];
-}
-
-const JURISDICTION_RULES: Map<string, JurisdictionRules> = new Map([
-  ['US', {
-    code: 'US',
-    name: 'United States',
-    shortTermRate: 37, // Up to 37% for highest bracket
-    longTermRate: 20, // Up to 20% for highest bracket
-    longTermThresholdDays: 365,
-    dividendRate: 20, // Qualified dividends
-    treatyPartners: ['GB', 'DE', 'CA', 'JP', 'AU', 'FR'],
-  }],
-  ['GB', {
-    code: 'GB',
-    name: 'United Kingdom',
-    shortTermRate: 20, // Capital Gains Tax
-    longTermRate: 20,
-    longTermThresholdDays: 0, // No distinction
-    dividendRate: 33.75,
-    treatyPartners: ['US', 'DE', 'CA', 'JP', 'AU', 'FR'],
-  }],
-  ['DE', {
-    code: 'DE',
-    name: 'Germany',
-    shortTermRate: 0, // Tax-free if held > 1 year
-    longTermRate: 0,
-    longTermThresholdDays: 365,
-    dividendRate: 25,
-    cryptoSpecificRules: {
-      holdingPeriodExemption: true,
-      exemptionDays: 365,
-    },
-    treatyPartners: ['US', 'GB', 'CA', 'JP', 'AU', 'FR'],
-  }],
-  ['SG', {
-    code: 'SG',
-    name: 'Singapore',
-    shortTermRate: 0, // No capital gains tax
-    longTermRate: 0,
-    longTermThresholdDays: 0,
-    dividendRate: 0,
-    treatyPartners: ['US', 'GB', 'DE', 'JP', 'AU'],
-  }],
-  ['JP', {
-    code: 'JP',
-    name: 'Japan',
-    shortTermRate: 55, // Misc income up to 55%
-    longTermRate: 55,
-    longTermThresholdDays: 0,
-    dividendRate: 20.315,
-    treatyPartners: ['US', 'GB', 'DE', 'SG', 'AU'],
-  }],
-  ['CH', {
-    code: 'CH',
-    name: 'Switzerland',
-    shortTermRate: 0, // Private wealth exempt
-    longTermRate: 0,
-    longTermThresholdDays: 0,
-    dividendRate: 35, // Withholding
-    cryptoSpecificRules: {
-      professionalTraderRules: true,
-    },
-    treatyPartners: ['US', 'GB', 'DE', 'JP'],
-  }],
-  ['AE', {
-    code: 'AE',
-    name: 'United Arab Emirates',
-    shortTermRate: 0,
-    longTermRate: 0,
-    longTermThresholdDays: 0,
-    dividendRate: 0,
-    treatyPartners: ['GB', 'DE', 'FR', 'IN'],
-  }],
-]);
+// Re-export for backward compatibility
+export type { JurisdictionRules } from './jurisdictions.js';
 
 export interface CostBasisLot {
   id: string;
@@ -642,20 +569,52 @@ export class VerityAutoTaxEngine extends EventEmitter {
   }
 
   /**
-   * Get supported jurisdictions
+   * Get supported jurisdictions (200+ countries)
    */
-  getSupportedJurisdictions(): Array<{ code: string; name: string }> {
-    return Array.from(JURISDICTION_RULES.values()).map((j) => ({
-      code: j.code,
-      name: j.name,
-    }));
+  getSupportedJurisdictions(): Array<{ code: string; name: string; region: string }> {
+    return getSupportedJurisdictions();
   }
 
   /**
    * Get jurisdiction rules (transparent methodology)
    */
   getJurisdictionRules(code: string): JurisdictionRules | undefined {
-    return JURISDICTION_RULES.get(code);
+    return getJurisdictionByCode(code);
+  }
+
+  /**
+   * Get jurisdictions by region
+   */
+  getJurisdictionsByRegion(region: string): JurisdictionRules[] {
+    return getJurisdictionsByRegion(region);
+  }
+
+  /**
+   * Get tax-friendly jurisdictions (0% capital gains)
+   */
+  getTaxFriendlyJurisdictions(): JurisdictionRules[] {
+    return getTaxFriendlyJurisdictions();
+  }
+
+  /**
+   * Get jurisdictions with holding period exemptions
+   */
+  getHoldingPeriodExemptionJurisdictions(): JurisdictionRules[] {
+    return getHoldingPeriodExemptionJurisdictions();
+  }
+
+  /**
+   * Get jurisdictions with tax treaty for specific country
+   */
+  getJurisdictionsWithTreaty(countryCode: string): JurisdictionRules[] {
+    return getJurisdictionsWithTreaty(countryCode);
+  }
+
+  /**
+   * Get total jurisdiction count
+   */
+  getJurisdictionCount(): number {
+    return JURISDICTION_RULES.size;
   }
 
   /**
