@@ -1,0 +1,47 @@
+# Verity Protocol - Docker Ignore
+
+# Dependencies
+node_modules
+
+# Build output
+dist
+
+# Git
+.git
+.gitignore
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# IDE
+.vscode
+.idea
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+logs
+*.log
+
+# Test
+coverage
+.nyc_output
+
+# Docs
+docs
+*.md
+!README.md
+
+# Examples
+examples
+
+# Development
+*.test.ts
+tests
+vitest.config.ts
+tsconfig.json
+tsup.config.ts
