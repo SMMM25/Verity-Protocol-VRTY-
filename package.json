@@ -1,0 +1,87 @@
+{
+  "name": "@verity-protocol/core",
+  "version": "0.1.0",
+  "description": "Verity Protocol - The Verified Financial Operating System for XRP Ledger",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./sdk": {
+      "import": "./dist/sdk/index.mjs",
+      "require": "./dist/sdk/index.js",
+      "types": "./dist/sdk/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsx watch src/server.ts",
+    "start": "node dist/server.js",
+    "test": "vitest",
+    "test:coverage": "vitest --coverage",
+    "lint": "eslint src --ext .ts",
+    "lint:fix": "eslint src --ext .ts --fix",
+    "format": "prettier --write \"src/**/*.ts\"",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist",
+    "prepare": "npm run build"
+  },
+  "keywords": [
+    "xrpl",
+    "xrp",
+    "blockchain",
+    "defi",
+    "tokenization",
+    "rwa",
+    "compliance",
+    "treasury",
+    "dao",
+    "verity"
+  ],
+  "author": "Verity Protocol Team",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/verity-protocol/verity-core.git"
+  },
+  "homepage": "https://verity.finance",
+  "bugs": {
+    "url": "https://github.com/verity-protocol/verity-core/issues"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "xrpl": "^3.1.0",
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "helmet": "^7.1.0",
+    "compression": "^1.7.4",
+    "dotenv": "^16.3.1",
+    "zod": "^3.22.4",
+    "winston": "^3.11.0",
+    "uuid": "^9.0.1",
+    "crypto-js": "^4.2.0",
+    "eventemitter3": "^5.0.1",
+    "rate-limiter-flexible": "^4.0.1"
+  },
+  "devDependencies": {
+    "@types/compression": "^1.7.5",
+    "@types/cors": "^2.8.17",
+    "@types/crypto-js": "^4.2.1",
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.10.6",
+    "@types/uuid": "^9.0.7",
+    "@typescript-eslint/eslint-plugin": "^6.17.0",
+    "@typescript-eslint/parser": "^6.17.0",
+    "eslint": "^8.56.0",
+    "prettier": "^3.1.1",
+    "tsup": "^8.0.1",
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.3",
+    "vitest": "^1.1.3"
+  }
+}
