@@ -1,0 +1,45 @@
+# Verity Protocol - Docker Compose Configuration
+# For local development and testing
+
+version: '3.8'
+
+services:
+  verity-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: verity-protocol
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - XRPL_NETWORK=testnet
+      - LOG_LEVEL=info
+      # Add your ISSUER_SEED in .env file for production
+      # - ISSUER_SEED=${ISSUER_SEED}
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Optional: Redis for rate limiting persistence
+  # redis:
+  #   image: redis:7-alpine
+  #   container_name: verity-redis
+  #   ports:
+  #     - "6379:6379"
+  #   volumes:
+  #     - redis_data:/data
+  #   restart: unless-stopped
+
+# volumes:
+#   redis_data:
