@@ -12,6 +12,8 @@ import { guildsRoutes } from './guilds.js';
 import { tokenRoutes } from './token.js';
 import { taxRoutes } from './tax.js';
 import { governanceRoutes } from './governance.js';
+import { transparencyRoutes } from './transparency.js';
+import { openAPIRoutes } from '../openapi.js';
 
 const router = Router();
 
@@ -24,6 +26,10 @@ router.use('/guilds', guildsRoutes);
 router.use('/token', tokenRoutes);
 router.use('/tax', taxRoutes);
 router.use('/governance', governanceRoutes);
+router.use('/transparency', transparencyRoutes);
+
+// OpenAPI/Swagger documentation
+router.use('/', openAPIRoutes);
 
 // API documentation endpoint
 router.get('/docs', (req, res) => {
@@ -40,7 +46,10 @@ router.get('/docs', (req, res) => {
       token: '/api/v1/token',
       tax: '/api/v1/tax',
       governance: '/api/v1/governance',
+      openapi: '/api/v1/openapi.json',
+      swagger: '/api/v1/swagger',
     },
+    transparency: '/api/v1/transparency',
     documentation: 'https://docs.verity.finance/api',
   });
 });
