@@ -55,18 +55,18 @@
     "node": ">=18.0.0"
   },
   "dependencies": {
-    "xrpl": "^3.1.0",
-    "express": "^4.18.2",
-    "cors": "^2.8.5",
-    "helmet": "^7.1.0",
     "compression": "^1.7.4",
-    "dotenv": "^16.3.1",
-    "zod": "^3.22.4",
-    "winston": "^3.11.0",
-    "uuid": "^9.0.1",
+    "cors": "^2.8.5",
     "crypto-js": "^4.2.0",
+    "dotenv": "^16.3.1",
     "eventemitter3": "^5.0.1",
-    "rate-limiter-flexible": "^4.0.1"
+    "express": "^4.18.2",
+    "helmet": "^7.1.0",
+    "rate-limiter-flexible": "^4.0.1",
+    "uuid": "^9.0.1",
+    "winston": "^3.11.0",
+    "xrpl": "^3.1.0",
+    "zod": "^3.22.4"
   },
   "devDependencies": {
     "@types/compression": "^1.7.5",
@@ -77,6 +77,7 @@
     "@types/uuid": "^9.0.7",
     "@typescript-eslint/eslint-plugin": "^6.17.0",
     "@typescript-eslint/parser": "^6.17.0",
+    "@vitest/coverage-v8": "^4.0.16",
     "eslint": "^8.56.0",
     "prettier": "^3.1.1",
     "tsup": "^8.0.1",
