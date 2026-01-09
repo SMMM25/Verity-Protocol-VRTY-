@@ -8,6 +8,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import compression from 'compression';
 import { config } from 'dotenv';
+import path from 'path';
 
 import routes from './api/routes/index.js';
 import {
@@ -32,16 +33,9 @@ const PORT = parseInt(process.env['API_PORT'] || '3000', 10);
 const HOST = process.env['API_HOST'] || '0.0.0.0';
 const API_VERSION = process.env['API_VERSION'] || 'v1';
 
-// Security middleware
+// Security middleware - relaxed for UI to work
 app.use(helmet({
-  contentSecurityPolicy: {
-    directives: {
-      defaultSrc: ["'self'"],
-      scriptSrc: ["'self'"],
-      styleSrc: ["'self'", "'unsafe-inline'"],
-      imgSrc: ["'self'", 'data:', 'https:'],
-    },
-  },
+  contentSecurityPolicy: false, // Disabled for UI CDN resources
 }));
 
 // CORS configuration
@@ -71,14 +65,24 @@ app.use(rateLimitMiddleware);
 // API key authentication
 app.use(apiKeyAuthMiddleware);
 
-// Root endpoint
+// Serve static UI files
+const uiPath = path.join(process.cwd(), 'ui');
+app.use('/ui', express.static(uiPath));
+
+// Root endpoint - redirect to UI
 app.get('/', (req, res) => {
+  res.redirect('/ui');
+});
+
+// API info endpoint
+app.get('/api', (req, res) => {
   res.json({
     name: 'Verity Protocol',
     description: 'The Verified Financial Operating System for XRP Ledger',
     version: process.env['npm_package_version'] || '0.1.0',
     apiVersion: API_VERSION,
     documentation: `https://docs.verity.finance/api/${API_VERSION}`,
+    ui: '/ui',
     endpoints: {
       api: `/api/${API_VERSION}`,
       health: `/api/${API_VERSION}/health`,
@@ -121,6 +125,7 @@ const server = app.listen(PORT, HOST, () => {
 ║   - API:     http://${HOST}:${PORT}/api/${API_VERSION}                   ║
 ║   - Health:  http://${HOST}:${PORT}/api/${API_VERSION}/health            ║
 ║   - Docs:    http://${HOST}:${PORT}/api/${API_VERSION}/docs              ║
+║   - UI:      http://${HOST}:${PORT}/ui                              ║
 ║                                                               ║
 ╚═══════════════════════════════════════════════════════════════╝
   `);
