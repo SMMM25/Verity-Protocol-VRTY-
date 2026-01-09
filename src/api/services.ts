@@ -11,6 +11,8 @@ import { VeritySignalsProtocol } from '../signals/SignalsProtocol.js';
 import { VerityGuildTreasury } from '../guilds/GuildTreasury.js';
 import { VRTYTokenManager } from '../token/VRTYToken.js';
 import { VerityAutoTaxEngine } from '../tax/AutoTaxEngine.js';
+import { ComplianceOracle } from '../compliance/ComplianceOracle.js';
+import { setComplianceOracle } from './routes/compliance.js';
 import { logger } from '../utils/logger.js';
 import type { ClawbackConfig, XRPLNetwork } from '../types/index.js';
 
@@ -22,6 +24,7 @@ let signalsProtocol: VeritySignalsProtocol | null = null;
 let guildTreasury: VerityGuildTreasury | null = null;
 let tokenManager: VRTYTokenManager | null = null;
 let taxEngine: VerityAutoTaxEngine | null = null;
+let complianceOracle: ComplianceOracle | null = null;
 let issuerWallet: Wallet | null = null;
 
 // Configuration
@@ -104,6 +107,17 @@ export async function initializeServices(config: ServiceConfig): Promise<void> {
   // Initialize Tax Engine (no dependencies)
   taxEngine = new VerityAutoTaxEngine();
   logger.info('Auto-Tax Engine initialized');
+
+  // Initialize Compliance Oracle
+  complianceOracle = new ComplianceOracle(xrplClient, xaoDow, {
+    governanceQuorum: clawbackConfig.governanceQuorum,
+    publicJustificationRequired: clawbackConfig.publicJustificationRequired,
+  });
+  if (config.governanceSigners && config.governanceSigners.length > 0) {
+    complianceOracle.setGovernanceSigners(config.governanceSigners);
+  }
+  setComplianceOracle(complianceOracle);
+  logger.info('Compliance Oracle initialized');
 
   logger.info('All Verity Protocol services initialized successfully');
 }
@@ -197,6 +211,16 @@ export function getTaxEngine(): VerityAutoTaxEngine {
 }
 
 /**
+ * Get Compliance Oracle instance
+ */
+export function getComplianceOracle(): ComplianceOracle {
+  if (!complianceOracle) {
+    throw new Error('Services not initialized. Call initializeServices() first.');
+  }
+  return complianceOracle;
+}
+
+/**
  * Get Issuer Wallet
  */
 export function getIssuerWallet(): Wallet {
@@ -232,6 +256,7 @@ export async function shutdownServices(): Promise<void> {
   guildTreasury = null;
   tokenManager = null;
   taxEngine = null;
+  complianceOracle = null;
   issuerWallet = null;
 
   logger.info('All services shut down');
@@ -263,6 +288,9 @@ export function getServiceStatus(): Record<string, unknown> {
     },
     taxEngine: {
       initialized: taxEngine !== null,
+    },
+    complianceOracle: {
+      initialized: complianceOracle !== null,
     },
     issuerWallet: {
       initialized: issuerWallet !== null,

@@ -14,6 +14,7 @@ export * from './signals/index.js';
 export * from './guilds/index.js';
 export * from './token/index.js';
 export * from './tax/index.js';
+export * from './compliance/index.js';
 
 // Types
 export * from './types/index.js';

@@ -191,8 +191,8 @@ describe('VerityAutoTaxEngine', () => {
       const result = await taxEngine.calculateVerifiedTransactionTax('us_user', sellTransaction);
       
       expect(result).toBeDefined();
-      expect(result.gainLoss).toBe('250'); // Sold for $500, cost basis $250
-      expect(result.taxableAmount).toBe('250');
+      expect(parseFloat(result.gainLoss)).toBe(250); // Sold for $500, cost basis $250
+      expect(parseFloat(result.taxableAmount)).toBe(250);
     });
 
     it('should apply long-term rates for US after 365 days', async () => {
