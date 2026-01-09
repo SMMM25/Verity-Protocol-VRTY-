@@ -1,0 +1,1307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Verity Protocol - VRTY Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #6366f1;
+            --primary-dark: #4f46e5;
+            --secondary: #10b981;
+            --accent: #f59e0b;
+            --dark: #1e1b4b;
+            --darker: #0f0d24;
+        }
+        
+        * {
+            scrollbar-width: thin;
+            scrollbar-color: var(--primary) var(--darker);
+        }
+        
+        body {
+            background: linear-gradient(135deg, var(--darker) 0%, var(--dark) 50%, #1a1744 100%);
+            min-height: 100vh;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+        }
+        
+        .glass-card {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 1rem;
+        }
+        
+        .glow-border {
+            box-shadow: 0 0 20px rgba(99, 102, 241, 0.3), 
+                        inset 0 0 20px rgba(99, 102, 241, 0.1);
+        }
+        
+        .glow-text {
+            text-shadow: 0 0 10px rgba(99, 102, 241, 0.5);
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+            transition: all 0.3s ease;
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(99, 102, 241, 0.4);
+        }
+        
+        .btn-secondary {
+            background: linear-gradient(135deg, var(--secondary) 0%, #059669 100%);
+        }
+        
+        .btn-accent {
+            background: linear-gradient(135deg, var(--accent) 0%, #d97706 100%);
+        }
+        
+        .stat-card {
+            background: linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(99, 102, 241, 0.05) 100%);
+            border: 1px solid rgba(99, 102, 241, 0.2);
+        }
+        
+        .nav-link {
+            position: relative;
+            transition: all 0.3s ease;
+        }
+        
+        .nav-link::after {
+            content: '';
+            position: absolute;
+            bottom: -4px;
+            left: 0;
+            width: 0;
+            height: 2px;
+            background: var(--primary);
+            transition: width 0.3s ease;
+        }
+        
+        .nav-link:hover::after,
+        .nav-link.active::after {
+            width: 100%;
+        }
+        
+        .tier-card {
+            transition: all 0.3s ease;
+        }
+        
+        .tier-card:hover {
+            transform: scale(1.02);
+        }
+        
+        .tier-basic { border-top: 3px solid #6b7280; }
+        .tier-professional { border-top: 3px solid var(--primary); }
+        .tier-institutional { border-top: 3px solid var(--accent); }
+        .tier-developer { border-top: 3px solid var(--secondary); }
+        
+        .pulse-dot {
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        .fade-in {
+            animation: fadeIn 0.5s ease-out;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .loading-spinner {
+            border: 3px solid rgba(255,255,255,0.1);
+            border-top: 3px solid var(--primary);
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        input, select {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: white;
+            transition: all 0.3s ease;
+        }
+        
+        input:focus, select:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 15px rgba(99, 102, 241, 0.3);
+        }
+        
+        .tooltip {
+            position: relative;
+        }
+        
+        .tooltip:hover::after {
+            content: attr(data-tooltip);
+            position: absolute;
+            bottom: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--dark);
+            padding: 0.5rem 1rem;
+            border-radius: 0.5rem;
+            white-space: nowrap;
+            font-size: 0.75rem;
+            z-index: 100;
+        }
+        
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .modal.active {
+            display: flex;
+        }
+        
+        .modal-content {
+            max-width: 500px;
+            width: 90%;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body class="text-white">
+    <!-- Header -->
+    <header class="fixed top-0 left-0 right-0 z-50 glass-card border-0 border-b">
+        <div class="container mx-auto px-4 py-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-4">
+                    <div class="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center">
+                        <span class="font-bold text-lg">V</span>
+                    </div>
+                    <div>
+                        <h1 class="text-xl font-bold glow-text">Verity Protocol</h1>
+                        <p class="text-xs text-gray-400">VRTY on XRP Ledger</p>
+                    </div>
+                </div>
+                
+                <nav class="hidden md:flex items-center gap-8">
+                    <a href="#dashboard" class="nav-link text-sm active" data-tab="dashboard">Dashboard</a>
+                    <a href="#stake" class="nav-link text-sm" data-tab="stake">Stake VRTY</a>
+                    <a href="#governance" class="nav-link text-sm" data-tab="governance">Governance</a>
+                    <a href="#tax" class="nav-link text-sm" data-tab="tax">Tax Calculator</a>
+                    <a href="#signals" class="nav-link text-sm" data-tab="signals">Signals</a>
+                </nav>
+                
+                <div class="flex items-center gap-4">
+                    <div id="network-status" class="flex items-center gap-2 text-xs">
+                        <span class="pulse-dot w-2 h-2 rounded-full bg-green-500"></span>
+                        <span class="text-gray-400">Testnet</span>
+                    </div>
+                    <button id="connect-wallet-btn" class="btn-primary px-4 py-2 rounded-lg text-sm font-medium">
+                        <i class="fas fa-wallet mr-2"></i>Connect Wallet
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="pt-24 pb-12">
+        <div class="container mx-auto px-4">
+            
+            <!-- Dashboard Tab -->
+            <div id="dashboard-tab" class="tab-content active fade-in">
+                <!-- Stats Row -->
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                    <div class="stat-card glass-card p-6 rounded-xl">
+                        <div class="flex items-center justify-between mb-4">
+                            <span class="text-gray-400 text-sm">VRTY Price</span>
+                            <i class="fas fa-chart-line text-indigo-400"></i>
+                        </div>
+                        <p class="text-3xl font-bold" id="vrty-price">$0.0001</p>
+                        <p class="text-green-400 text-sm mt-2">+5.2% <span class="text-gray-500">24h</span></p>
+                    </div>
+                    
+                    <div class="stat-card glass-card p-6 rounded-xl">
+                        <div class="flex items-center justify-between mb-4">
+                            <span class="text-gray-400 text-sm">Total Supply</span>
+                            <i class="fas fa-coins text-yellow-400"></i>
+                        </div>
+                        <p class="text-3xl font-bold" id="total-supply">1B VRTY</p>
+                        <p class="text-gray-500 text-sm mt-2">Fixed supply</p>
+                    </div>
+                    
+                    <div class="stat-card glass-card p-6 rounded-xl">
+                        <div class="flex items-center justify-between mb-4">
+                            <span class="text-gray-400 text-sm">Total Staked</span>
+                            <i class="fas fa-lock text-purple-400"></i>
+                        </div>
+                        <p class="text-3xl font-bold" id="total-staked">0 VRTY</p>
+                        <p class="text-gray-500 text-sm mt-2">0% of supply</p>
+                    </div>
+                    
+                    <div class="stat-card glass-card p-6 rounded-xl">
+                        <div class="flex items-center justify-between mb-4">
+                            <span class="text-gray-400 text-sm">Active Proposals</span>
+                            <i class="fas fa-vote-yea text-green-400"></i>
+                        </div>
+                        <p class="text-3xl font-bold" id="active-proposals">0</p>
+                        <p class="text-gray-500 text-sm mt-2">Governance</p>
+                    </div>
+                </div>
+                
+                <!-- Token Info Card -->
+                <div class="glass-card glow-border p-8 rounded-xl mb-8">
+                    <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-6 mb-8">
+                        <div>
+                            <h2 class="text-2xl font-bold mb-2">VRTY Token</h2>
+                            <p class="text-gray-400">The governance and utility token of Verity Protocol</p>
+                        </div>
+                        <div class="flex flex-wrap gap-3">
+                            <a href="https://testnet.xrpl.org/accounts/rBU2SVSbw6f4GErNtCLs5tuHDZo5SrD55h" target="_blank" 
+                               class="btn-secondary px-4 py-2 rounded-lg text-sm font-medium">
+                                <i class="fas fa-external-link-alt mr-2"></i>View on Explorer
+                            </a>
+                            <button onclick="showAddTrustlineModal()" class="btn-primary px-4 py-2 rounded-lg text-sm font-medium">
+                                <i class="fas fa-plus mr-2"></i>Add Trustline
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-6">
+                        <div>
+                            <p class="text-gray-400 text-sm mb-1">Symbol</p>
+                            <p class="text-lg font-semibold">VRTY</p>
+                        </div>
+                        <div>
+                            <p class="text-gray-400 text-sm mb-1">Network</p>
+                            <p class="text-lg font-semibold">XRP Ledger</p>
+                        </div>
+                        <div>
+                            <p class="text-gray-400 text-sm mb-1">Decimals</p>
+                            <p class="text-lg font-semibold">6</p>
+                        </div>
+                        <div>
+                            <p class="text-gray-400 text-sm mb-1">Issuer</p>
+                            <p class="text-lg font-semibold truncate" title="rBU2SVSbw6f4GErNtCLs5tuHDZo5SrD55h">
+                                rBU2...5h
+                            </p>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Staking Tiers -->
+                <h3 class="text-xl font-bold mb-6">Staking Tiers & Benefits</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8" id="tiers-container">
+                    <!-- Tiers will be loaded dynamically -->
+                </div>
+                
+                <!-- Quick Actions -->
+                <h3 class="text-xl font-bold mb-6">Quick Actions</h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div class="glass-card p-6 rounded-xl hover:border-indigo-500 cursor-pointer transition-all" onclick="showTab('stake')">
+                        <div class="w-12 h-12 rounded-full bg-purple-500/20 flex items-center justify-center mb-4">
+                            <i class="fas fa-coins text-purple-400 text-xl"></i>
+                        </div>
+                        <h4 class="font-semibold mb-2">Stake VRTY</h4>
+                        <p class="text-gray-400 text-sm">Earn rewards and unlock premium features by staking your VRTY tokens.</p>
+                    </div>
+                    
+                    <div class="glass-card p-6 rounded-xl hover:border-green-500 cursor-pointer transition-all" onclick="showTab('governance')">
+                        <div class="w-12 h-12 rounded-full bg-green-500/20 flex items-center justify-center mb-4">
+                            <i class="fas fa-vote-yea text-green-400 text-xl"></i>
+                        </div>
+                        <h4 class="font-semibold mb-2">Vote on Proposals</h4>
+                        <p class="text-gray-400 text-sm">Participate in governance and help shape the future of Verity Protocol.</p>
+                    </div>
+                    
+                    <div class="glass-card p-6 rounded-xl hover:border-yellow-500 cursor-pointer transition-all" onclick="showTab('tax')">
+                        <div class="w-12 h-12 rounded-full bg-yellow-500/20 flex items-center justify-center mb-4">
+                            <i class="fas fa-calculator text-yellow-400 text-xl"></i>
+                        </div>
+                        <h4 class="font-semibold mb-2">Calculate Taxes</h4>
+                        <p class="text-gray-400 text-sm">Automatic tax calculation for 216+ jurisdictions worldwide.</p>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Stake Tab -->
+            <div id="stake-tab" class="tab-content fade-in">
+                <div class="max-w-2xl mx-auto">
+                    <h2 class="text-2xl font-bold mb-6">Stake VRTY Tokens</h2>
+                    
+                    <!-- Your Stake Info -->
+                    <div class="glass-card p-6 rounded-xl mb-6">
+                        <h3 class="font-semibold mb-4">Your Staking Position</h3>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <p class="text-gray-400 text-sm">Staked Amount</p>
+                                <p class="text-2xl font-bold" id="user-staked">0 VRTY</p>
+                            </div>
+                            <div>
+                                <p class="text-gray-400 text-sm">Current Tier</p>
+                                <p class="text-2xl font-bold" id="user-tier">None</p>
+                            </div>
+                            <div>
+                                <p class="text-gray-400 text-sm">Pending Rewards</p>
+                                <p class="text-2xl font-bold text-green-400" id="pending-rewards">0 VRTY</p>
+                            </div>
+                            <div>
+                                <p class="text-gray-400 text-sm">Fee Discount</p>
+                                <p class="text-2xl font-bold text-purple-400" id="fee-discount">0%</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Stake Form -->
+                    <div class="glass-card glow-border p-6 rounded-xl mb-6">
+                        <h3 class="font-semibold mb-4">Stake Tokens</h3>
+                        <form id="stake-form" class="space-y-4">
+                            <div>
+                                <label class="block text-sm text-gray-400 mb-2">Amount to Stake</label>
+                                <div class="relative">
+                                    <input type="number" id="stake-amount" placeholder="Enter amount" 
+                                           class="w-full px-4 py-3 rounded-lg" min="100" step="100">
+                                    <span class="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400">VRTY</span>
+                                </div>
+                            </div>
+                            
+                            <div>
+                                <label class="block text-sm text-gray-400 mb-2">Lock Period</label>
+                                <select id="lock-period" class="w-full px-4 py-3 rounded-lg">
+                                    <option value="30">30 Days (1x rewards)</option>
+                                    <option value="90">90 Days (1.5x rewards)</option>
+                                    <option value="180">180 Days (2x rewards)</option>
+                                    <option value="365">365 Days (3x rewards)</option>
+                                </select>
+                            </div>
+                            
+                            <div class="bg-indigo-500/10 p-4 rounded-lg">
+                                <p class="text-sm text-gray-300">
+                                    <i class="fas fa-info-circle mr-2 text-indigo-400"></i>
+                                    Longer lock periods earn higher rewards. Staked tokens cannot be unstaked until the lock period ends.
+                                </p>
+                            </div>
+                            
+                            <button type="submit" class="btn-primary w-full py-3 rounded-lg font-semibold">
+                                <i class="fas fa-lock mr-2"></i>Stake VRTY
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <!-- Unstake Form -->
+                    <div class="glass-card p-6 rounded-xl">
+                        <h3 class="font-semibold mb-4">Unstake & Claim Rewards</h3>
+                        <div class="flex gap-4">
+                            <button onclick="unstakeTokens()" class="btn-secondary flex-1 py-3 rounded-lg font-semibold">
+                                <i class="fas fa-unlock mr-2"></i>Unstake
+                            </button>
+                            <button onclick="claimRewards()" class="btn-accent flex-1 py-3 rounded-lg font-semibold">
+                                <i class="fas fa-gift mr-2"></i>Claim Rewards
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Governance Tab -->
+            <div id="governance-tab" class="tab-content fade-in">
+                <div class="flex flex-col lg:flex-row gap-6">
+                    <!-- Proposals List -->
+                    <div class="flex-1">
+                        <div class="flex items-center justify-between mb-6">
+                            <h2 class="text-2xl font-bold">Governance Proposals</h2>
+                            <button onclick="showCreateProposalModal()" class="btn-primary px-4 py-2 rounded-lg text-sm">
+                                <i class="fas fa-plus mr-2"></i>Create Proposal
+                            </button>
+                        </div>
+                        
+                        <div id="proposals-list" class="space-y-4">
+                            <!-- Proposals loaded dynamically -->
+                            <div class="glass-card p-6 rounded-xl text-center">
+                                <i class="fas fa-vote-yea text-4xl text-gray-600 mb-4"></i>
+                                <p class="text-gray-400">No active proposals</p>
+                                <p class="text-sm text-gray-500 mt-2">Be the first to create a proposal!</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Governance Stats -->
+                    <div class="w-full lg:w-80">
+                        <div class="glass-card p-6 rounded-xl mb-6">
+                            <h3 class="font-semibold mb-4">Governance Stats</h3>
+                            <div class="space-y-4">
+                                <div class="flex justify-between">
+                                    <span class="text-gray-400">Total Proposals</span>
+                                    <span class="font-semibold" id="total-proposals">0</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-gray-400">Active Voting</span>
+                                    <span class="font-semibold" id="active-voting">0</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-gray-400">Passed</span>
+                                    <span class="font-semibold text-green-400" id="passed-proposals">0</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-gray-400">Rejected</span>
+                                    <span class="font-semibold text-red-400" id="rejected-proposals">0</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="glass-card p-6 rounded-xl">
+                            <h3 class="font-semibold mb-4">Your Voting Power</h3>
+                            <p class="text-3xl font-bold mb-2" id="voting-power">0</p>
+                            <p class="text-sm text-gray-400">Based on your staked VRTY</p>
+                            <div class="mt-4 bg-indigo-500/10 p-3 rounded-lg">
+                                <p class="text-xs text-gray-300">
+                                    <i class="fas fa-lightbulb mr-1 text-yellow-400"></i>
+                                    Stake more VRTY to increase your voting power
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Tax Calculator Tab -->
+            <div id="tax-tab" class="tab-content fade-in">
+                <div class="max-w-4xl mx-auto">
+                    <h2 class="text-2xl font-bold mb-6">Auto-Tax Engine</h2>
+                    <p class="text-gray-400 mb-8">Calculate your crypto tax obligations for 216+ jurisdictions worldwide.</p>
+                    
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+                        <div class="lg:col-span-2 glass-card glow-border p-6 rounded-xl">
+                            <h3 class="font-semibold mb-4">Tax Calculator</h3>
+                            <form id="tax-form" class="space-y-4">
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                        <label class="block text-sm text-gray-400 mb-2">Jurisdiction</label>
+                                        <select id="tax-jurisdiction" class="w-full px-4 py-3 rounded-lg">
+                                            <option value="">Select country...</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm text-gray-400 mb-2">Transaction Type</label>
+                                        <select id="tx-type" class="w-full px-4 py-3 rounded-lg">
+                                            <option value="SELL">Sell</option>
+                                            <option value="BUY">Buy</option>
+                                            <option value="TRANSFER">Transfer</option>
+                                            <option value="STAKING_REWARD">Staking Reward</option>
+                                            <option value="AIRDROP">Airdrop</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                        <label class="block text-sm text-gray-400 mb-2">Amount (USD)</label>
+                                        <input type="number" id="tax-amount" placeholder="Enter amount" 
+                                               class="w-full px-4 py-3 rounded-lg" min="0" step="0.01">
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm text-gray-400 mb-2">Cost Basis Method</label>
+                                        <select id="cost-basis" class="w-full px-4 py-3 rounded-lg">
+                                            <option value="FIFO">FIFO (First In, First Out)</option>
+                                            <option value="LIFO">LIFO (Last In, First Out)</option>
+                                            <option value="HIFO">HIFO (Highest In, First Out)</option>
+                                            <option value="AVERAGE">Average Cost</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                
+                                <div>
+                                    <label class="block text-sm text-gray-400 mb-2">Holding Period (Days)</label>
+                                    <input type="number" id="holding-period" placeholder="Number of days held" 
+                                           class="w-full px-4 py-3 rounded-lg" min="0">
+                                </div>
+                                
+                                <button type="submit" class="btn-primary w-full py-3 rounded-lg font-semibold">
+                                    <i class="fas fa-calculator mr-2"></i>Calculate Tax
+                                </button>
+                            </form>
+                        </div>
+                        
+                        <div class="glass-card p-6 rounded-xl">
+                            <h3 class="font-semibold mb-4">Tax Summary</h3>
+                            <div id="tax-result" class="space-y-4">
+                                <div class="text-center py-8">
+                                    <i class="fas fa-receipt text-4xl text-gray-600 mb-4"></i>
+                                    <p class="text-gray-400">Enter transaction details to calculate</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Jurisdiction Info -->
+                    <div class="glass-card p-6 rounded-xl">
+                        <h3 class="font-semibold mb-4">Supported Jurisdictions</h3>
+                        <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4" id="jurisdictions-grid">
+                            <!-- Loaded dynamically -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Signals Tab -->
+            <div id="signals-tab" class="tab-content fade-in">
+                <div class="max-w-4xl mx-auto">
+                    <h2 class="text-2xl font-bold mb-6">Proof-of-Engagement Signals</h2>
+                    <p class="text-gray-400 mb-8">Build your on-chain reputation through meaningful interactions.</p>
+                    
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+                        <!-- Send Signal -->
+                        <div class="glass-card glow-border p-6 rounded-xl">
+                            <h3 class="font-semibold mb-4">Send Signal</h3>
+                            <form id="signal-form" class="space-y-4">
+                                <div>
+                                    <label class="block text-sm text-gray-400 mb-2">Recipient Wallet</label>
+                                    <input type="text" id="signal-recipient" placeholder="rXXXX..." 
+                                           class="w-full px-4 py-3 rounded-lg">
+                                </div>
+                                
+                                <div>
+                                    <label class="block text-sm text-gray-400 mb-2">Signal Amount (XRP)</label>
+                                    <input type="number" id="signal-amount" placeholder="Min: 10 XRP" 
+                                           class="w-full px-4 py-3 rounded-lg" min="10" step="1">
+                                </div>
+                                
+                                <div>
+                                    <label class="block text-sm text-gray-400 mb-2">Message (Optional)</label>
+                                    <textarea id="signal-message" placeholder="Add a message..." 
+                                              class="w-full px-4 py-3 rounded-lg h-24 resize-none"></textarea>
+                                </div>
+                                
+                                <button type="submit" class="btn-primary w-full py-3 rounded-lg font-semibold">
+                                    <i class="fas fa-paper-plane mr-2"></i>Send Signal
+                                </button>
+                            </form>
+                        </div>
+                        
+                        <!-- Reputation Score -->
+                        <div class="glass-card p-6 rounded-xl">
+                            <h3 class="font-semibold mb-4">Your Reputation</h3>
+                            <div class="text-center mb-6">
+                                <div class="relative inline-block">
+                                    <svg class="w-32 h-32 transform -rotate-90">
+                                        <circle cx="64" cy="64" r="56" stroke="currentColor" stroke-width="8" 
+                                                fill="none" class="text-gray-700"></circle>
+                                        <circle cx="64" cy="64" r="56" stroke="currentColor" stroke-width="8" 
+                                                fill="none" class="text-indigo-500" stroke-dasharray="352" 
+                                                stroke-dashoffset="352" id="reputation-circle"></circle>
+                                    </svg>
+                                    <span class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 
+                                                 text-3xl font-bold" id="reputation-score">0</span>
+                                </div>
+                            </div>
+                            
+                            <div class="space-y-3">
+                                <div class="flex justify-between items-center">
+                                    <span class="text-gray-400">Signals Received</span>
+                                    <span class="font-semibold" id="signals-received">0</span>
+                                </div>
+                                <div class="flex justify-between items-center">
+                                    <span class="text-gray-400">Signals Sent</span>
+                                    <span class="font-semibold" id="signals-sent">0</span>
+                                </div>
+                                <div class="flex justify-between items-center">
+                                    <span class="text-gray-400">Total XRP Received</span>
+                                    <span class="font-semibold" id="total-xrp-received">0 XRP</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Algorithm Info -->
+                    <div class="glass-card p-6 rounded-xl">
+                        <h3 class="font-semibold mb-4">Reputation Algorithm</h3>
+                        <div id="algorithm-info">
+                            <!-- Loaded dynamically -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Wallet Connection Modal -->
+    <div id="wallet-modal" class="modal">
+        <div class="modal-content glass-card p-6 rounded-xl">
+            <div class="flex items-center justify-between mb-6">
+                <h3 class="text-xl font-bold">Connect Wallet</h3>
+                <button onclick="closeModal('wallet-modal')" class="text-gray-400 hover:text-white">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            
+            <div class="space-y-4">
+                <p class="text-gray-400 text-sm mb-4">
+                    Connect your XRP Ledger wallet to interact with Verity Protocol.
+                </p>
+                
+                <div class="space-y-3">
+                    <button onclick="connectWithSeed()" class="w-full glass-card p-4 rounded-lg flex items-center gap-4 hover:border-indigo-500 transition-all">
+                        <div class="w-10 h-10 rounded-full bg-indigo-500/20 flex items-center justify-center">
+                            <i class="fas fa-key text-indigo-400"></i>
+                        </div>
+                        <div class="text-left">
+                            <p class="font-semibold">Secret Key</p>
+                            <p class="text-xs text-gray-400">Connect with your wallet seed</p>
+                        </div>
+                    </button>
+                    
+                    <button onclick="createTestWallet()" class="w-full glass-card p-4 rounded-lg flex items-center gap-4 hover:border-green-500 transition-all">
+                        <div class="w-10 h-10 rounded-full bg-green-500/20 flex items-center justify-center">
+                            <i class="fas fa-plus text-green-400"></i>
+                        </div>
+                        <div class="text-left">
+                            <p class="font-semibold">Create Test Wallet</p>
+                            <p class="text-xs text-gray-400">Get a funded testnet wallet</p>
+                        </div>
+                    </button>
+                </div>
+                
+                <div id="wallet-input-section" class="hidden mt-4">
+                    <input type="password" id="wallet-seed" placeholder="Enter your secret key (sXXXX...)" 
+                           class="w-full px-4 py-3 rounded-lg mb-4">
+                    <button onclick="connectWithEnteredSeed()" class="btn-primary w-full py-3 rounded-lg font-semibold">
+                        Connect
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Trustline Modal -->
+    <div id="trustline-modal" class="modal">
+        <div class="modal-content glass-card p-6 rounded-xl">
+            <div class="flex items-center justify-between mb-6">
+                <h3 class="text-xl font-bold">Add VRTY Trustline</h3>
+                <button onclick="closeModal('trustline-modal')" class="text-gray-400 hover:text-white">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            
+            <div class="space-y-4">
+                <p class="text-gray-400 text-sm">
+                    To hold VRTY tokens, you need to add a trustline to the VRTY issuer.
+                </p>
+                
+                <div class="bg-indigo-500/10 p-4 rounded-lg">
+                    <p class="text-sm"><strong>Currency:</strong> VRTY</p>
+                    <p class="text-sm"><strong>Issuer:</strong> rBU2SVSbw6f4GErNtCLs5tuHDZo5SrD55h</p>
+                    <p class="text-sm"><strong>Network:</strong> XRPL Testnet</p>
+                </div>
+                
+                <button onclick="addTrustline()" class="btn-primary w-full py-3 rounded-lg font-semibold">
+                    <i class="fas fa-link mr-2"></i>Add Trustline
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create Proposal Modal -->
+    <div id="proposal-modal" class="modal">
+        <div class="modal-content glass-card p-6 rounded-xl">
+            <div class="flex items-center justify-between mb-6">
+                <h3 class="text-xl font-bold">Create Proposal</h3>
+                <button onclick="closeModal('proposal-modal')" class="text-gray-400 hover:text-white">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            
+            <form id="proposal-form" class="space-y-4">
+                <div>
+                    <label class="block text-sm text-gray-400 mb-2">Title</label>
+                    <input type="text" id="proposal-title" placeholder="Proposal title" 
+                           class="w-full px-4 py-3 rounded-lg" maxlength="200" required>
+                </div>
+                
+                <div>
+                    <label class="block text-sm text-gray-400 mb-2">Category</label>
+                    <select id="proposal-category" class="w-full px-4 py-3 rounded-lg" required>
+                        <option value="FEE_CHANGE">Fee Change</option>
+                        <option value="CLAWBACK_POLICY">Clawback Policy</option>
+                        <option value="ASSET_VERIFICATION">Asset Verification</option>
+                        <option value="TREASURY_ALLOCATION">Treasury Allocation</option>
+                        <option value="PROTOCOL_UPGRADE">Protocol Upgrade</option>
+                    </select>
+                </div>
+                
+                <div>
+                    <label class="block text-sm text-gray-400 mb-2">Description</label>
+                    <textarea id="proposal-description" placeholder="Describe your proposal..." 
+                              class="w-full px-4 py-3 rounded-lg h-32 resize-none" maxlength="5000" required></textarea>
+                </div>
+                
+                <div class="bg-yellow-500/10 p-4 rounded-lg">
+                    <p class="text-sm text-yellow-300">
+                        <i class="fas fa-exclamation-triangle mr-2"></i>
+                        Creating a proposal requires 10,000 VRTY staked.
+                    </p>
+                </div>
+                
+                <button type="submit" class="btn-primary w-full py-3 rounded-lg font-semibold">
+                    <i class="fas fa-paper-plane mr-2"></i>Submit Proposal
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Toast Notifications -->
+    <div id="toast-container" class="fixed bottom-4 right-4 z-50 space-y-2"></div>
+
+    <script>
+        // Configuration
+        const API_BASE = window.location.origin + '/api/v1';
+        const VRTY_ISSUER = 'rBU2SVSbw6f4GErNtCLs5tuHDZo5SrD55h';
+        const VRTY_CURRENCY_HEX = '5652545900000000000000000000000000000000';
+        
+        // State
+        let connectedWallet = null;
+        let walletBalance = null;
+        
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            initNavigation();
+            loadDashboardData();
+            loadTiers();
+            loadJurisdictions();
+            loadAlgorithmInfo();
+        });
+        
+        // Navigation
+        function initNavigation() {
+            document.querySelectorAll('.nav-link').forEach(link => {
+                link.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    const tab = link.dataset.tab;
+                    showTab(tab);
+                });
+            });
+        }
+        
+        function showTab(tabName) {
+            // Hide all tabs
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // Remove active from nav links
+            document.querySelectorAll('.nav-link').forEach(link => {
+                link.classList.remove('active');
+            });
+            
+            // Show selected tab
+            const tab = document.getElementById(`${tabName}-tab`);
+            if (tab) {
+                tab.classList.add('active');
+            }
+            
+            // Activate nav link
+            const navLink = document.querySelector(`.nav-link[data-tab="${tabName}"]`);
+            if (navLink) {
+                navLink.classList.add('active');
+            }
+        }
+        
+        // API Functions
+        async function fetchAPI(endpoint, options = {}) {
+            try {
+                const response = await fetch(`${API_BASE}${endpoint}`, {
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...options.headers
+                    },
+                    ...options
+                });
+                return await response.json();
+            } catch (error) {
+                console.error('API Error:', error);
+                showToast('API Error: ' + error.message, 'error');
+                return null;
+            }
+        }
+        
+        // Dashboard Data
+        async function loadDashboardData() {
+            const tokenInfo = await fetchAPI('/token/info');
+            if (tokenInfo?.success) {
+                const data = tokenInfo.data;
+                document.getElementById('total-supply').textContent = formatNumber(data.totalSupply) + ' VRTY';
+                document.getElementById('total-staked').textContent = formatNumber(data.totalStaked) + ' VRTY';
+            }
+            
+            const govStats = await fetchAPI('/governance/stats');
+            if (govStats?.success) {
+                document.getElementById('active-proposals').textContent = govStats.data.activeProposals || 0;
+                document.getElementById('total-proposals').textContent = govStats.data.totalProposals || 0;
+            }
+        }
+        
+        // Load Tiers
+        async function loadTiers() {
+            const tiersData = await fetchAPI('/token/tiers');
+            if (tiersData?.success) {
+                const container = document.getElementById('tiers-container');
+                container.innerHTML = '';
+                
+                const tierColors = {
+                    'BASIC': { border: 'tier-basic', icon: 'text-gray-400', bg: 'bg-gray-500/20' },
+                    'PROFESSIONAL': { border: 'tier-professional', icon: 'text-indigo-400', bg: 'bg-indigo-500/20' },
+                    'INSTITUTIONAL': { border: 'tier-institutional', icon: 'text-yellow-400', bg: 'bg-yellow-500/20' },
+                    'DEVELOPER': { border: 'tier-developer', icon: 'text-green-400', bg: 'bg-green-500/20' }
+                };
+                
+                Object.entries(tiersData.data.tiers).forEach(([name, tier]) => {
+                    const colors = tierColors[name] || tierColors['BASIC'];
+                    const card = document.createElement('div');
+                    card.className = `glass-card tier-card p-6 rounded-xl ${colors.border}`;
+                    card.innerHTML = `
+                        <div class="flex items-center gap-3 mb-4">
+                            <div class="w-10 h-10 rounded-full ${colors.bg} flex items-center justify-center">
+                                <i class="fas fa-crown ${colors.icon}"></i>
+                            </div>
+                            <div>
+                                <h4 class="font-semibold">${name}</h4>
+                                <p class="text-xs text-gray-400">${tier.feeDiscount / 100}% fee discount</p>
+                            </div>
+                        </div>
+                        <p class="text-2xl font-bold mb-4">${formatNumber(tier.minStake)} <span class="text-sm text-gray-400">VRTY</span></p>
+                        <ul class="space-y-2">
+                            ${tier.features.map(f => `
+                                <li class="text-sm text-gray-300 flex items-start gap-2">
+                                    <i class="fas fa-check text-green-400 mt-1"></i>
+                                    <span>${f}</span>
+                                </li>
+                            `).join('')}
+                        </ul>
+                    `;
+                    container.appendChild(card);
+                });
+            }
+        }
+        
+        // Load Jurisdictions
+        async function loadJurisdictions() {
+            const data = await fetchAPI('/tax/jurisdictions');
+            if (data?.success) {
+                // Populate dropdown
+                const select = document.getElementById('tax-jurisdiction');
+                data.data.jurisdictions.forEach(j => {
+                    const option = document.createElement('option');
+                    option.value = j.code;
+                    option.textContent = `${j.name} (${j.code})`;
+                    select.appendChild(option);
+                });
+                
+                // Show some jurisdiction flags
+                const grid = document.getElementById('jurisdictions-grid');
+                const popular = data.data.jurisdictions.slice(0, 12);
+                grid.innerHTML = popular.map(j => `
+                    <div class="text-center p-2 rounded-lg hover:bg-white/5 cursor-pointer" 
+                         onclick="document.getElementById('tax-jurisdiction').value='${j.code}'">
+                        <span class="text-2xl">${getCountryFlag(j.code)}</span>
+                        <p class="text-xs text-gray-400 mt-1">${j.code}</p>
+                    </div>
+                `).join('');
+            }
+        }
+        
+        // Load Algorithm Info
+        async function loadAlgorithmInfo() {
+            const data = await fetchAPI('/signals/algorithm');
+            if (data?.success) {
+                const algo = data.data;
+                const container = document.getElementById('algorithm-info');
+                container.innerHTML = `
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <h4 class="font-semibold mb-3">Formula Components</h4>
+                            <div class="space-y-2">
+                                ${algo.components.map(c => `
+                                    <div class="bg-white/5 p-3 rounded-lg">
+                                        <p class="font-medium text-sm">${c.name}</p>
+                                        <code class="text-xs text-indigo-400">${c.formula}</code>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                        <div>
+                            <h4 class="font-semibold mb-3">Anti-Manipulation</h4>
+                            <ul class="space-y-2">
+                                ${algo.antiManipulation.map(m => `
+                                    <li class="flex items-start gap-2 text-sm text-gray-300">
+                                        <i class="fas fa-shield-alt text-green-400 mt-1"></i>
+                                        <span>${m}</span>
+                                    </li>
+                                `).join('')}
+                            </ul>
+                        </div>
+                    </div>
+                `;
+            }
+        }
+        
+        // Wallet Functions
+        document.getElementById('connect-wallet-btn').addEventListener('click', () => {
+            document.getElementById('wallet-modal').classList.add('active');
+        });
+        
+        function connectWithSeed() {
+            document.getElementById('wallet-input-section').classList.remove('hidden');
+        }
+        
+        async function createTestWallet() {
+            showToast('Creating test wallet...', 'info');
+            // In real implementation, this would create a wallet via XRPL faucet
+            showToast('Test wallet created! Check console for details.', 'success');
+            closeModal('wallet-modal');
+        }
+        
+        async function connectWithEnteredSeed() {
+            const seed = document.getElementById('wallet-seed').value;
+            if (!seed) {
+                showToast('Please enter your secret key', 'error');
+                return;
+            }
+            
+            showToast('Connecting wallet...', 'info');
+            // In real implementation, this would connect to XRPL
+            connectedWallet = { address: 'rXXXX...XXXX', seed };
+            document.getElementById('connect-wallet-btn').innerHTML = `
+                <i class="fas fa-wallet mr-2"></i>${connectedWallet.address.substring(0, 8)}...
+            `;
+            closeModal('wallet-modal');
+            showToast('Wallet connected!', 'success');
+        }
+        
+        // Trustline
+        function showAddTrustlineModal() {
+            document.getElementById('trustline-modal').classList.add('active');
+        }
+        
+        async function addTrustline() {
+            if (!connectedWallet) {
+                showToast('Please connect your wallet first', 'error');
+                closeModal('trustline-modal');
+                document.getElementById('wallet-modal').classList.add('active');
+                return;
+            }
+            
+            showToast('Adding trustline...', 'info');
+            // In real implementation, this would submit a TrustSet transaction
+            closeModal('trustline-modal');
+            showToast('Trustline added successfully!', 'success');
+        }
+        
+        // Staking
+        document.getElementById('stake-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            if (!connectedWallet) {
+                showToast('Please connect your wallet first', 'error');
+                document.getElementById('wallet-modal').classList.add('active');
+                return;
+            }
+            
+            const amount = document.getElementById('stake-amount').value;
+            const lockPeriod = document.getElementById('lock-period').value;
+            
+            if (!amount || amount < 100) {
+                showToast('Minimum stake is 100 VRTY', 'error');
+                return;
+            }
+            
+            showToast('Staking tokens...', 'info');
+            
+            const result = await fetchAPI('/token/stake', {
+                method: 'POST',
+                body: JSON.stringify({ amount, lockPeriodDays: parseInt(lockPeriod) })
+            });
+            
+            if (result?.success) {
+                showToast(`Successfully staked ${amount} VRTY!`, 'success');
+                document.getElementById('stake-form').reset();
+            }
+        });
+        
+        async function unstakeTokens() {
+            if (!connectedWallet) {
+                showToast('Please connect your wallet first', 'error');
+                return;
+            }
+            showToast('Unstaking requires the lock period to end', 'info');
+        }
+        
+        async function claimRewards() {
+            if (!connectedWallet) {
+                showToast('Please connect your wallet first', 'error');
+                return;
+            }
+            
+            const result = await fetchAPI('/token/rewards/claim', { method: 'POST' });
+            if (result?.success) {
+                showToast('Rewards claim submitted!', 'success');
+            }
+        }
+        
+        // Governance
+        function showCreateProposalModal() {
+            if (!connectedWallet) {
+                showToast('Please connect your wallet first', 'error');
+                document.getElementById('wallet-modal').classList.add('active');
+                return;
+            }
+            document.getElementById('proposal-modal').classList.add('active');
+        }
+        
+        document.getElementById('proposal-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const title = document.getElementById('proposal-title').value;
+            const category = document.getElementById('proposal-category').value;
+            const description = document.getElementById('proposal-description').value;
+            
+            showToast('Creating proposal...', 'info');
+            
+            const result = await fetchAPI('/governance/proposals', {
+                method: 'POST',
+                body: JSON.stringify({ title, category, description })
+            });
+            
+            if (result?.success) {
+                showToast('Proposal created!', 'success');
+                closeModal('proposal-modal');
+                document.getElementById('proposal-form').reset();
+            }
+        });
+        
+        // Tax Calculator
+        document.getElementById('tax-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const jurisdiction = document.getElementById('tax-jurisdiction').value;
+            const txType = document.getElementById('tx-type').value;
+            const amount = document.getElementById('tax-amount').value;
+            const holdingPeriod = document.getElementById('holding-period').value;
+            
+            if (!jurisdiction || !amount) {
+                showToast('Please fill in all required fields', 'error');
+                return;
+            }
+            
+            // Get jurisdiction info
+            const jurisdictionData = await fetchAPI(`/tax/jurisdictions/${jurisdiction}`);
+            
+            const resultDiv = document.getElementById('tax-result');
+            if (jurisdictionData?.success) {
+                const j = jurisdictionData.data;
+                const isLongTerm = holdingPeriod >= (j.longTermThresholdDays || 365);
+                const rate = isLongTerm ? j.longTermRate : j.shortTermRate;
+                const taxAmount = (amount * rate / 100).toFixed(2);
+                
+                resultDiv.innerHTML = `
+                    <div class="space-y-4">
+                        <div class="flex justify-between">
+                            <span class="text-gray-400">Jurisdiction</span>
+                            <span class="font-semibold">${getCountryFlag(j.code)} ${j.name}</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-400">Transaction Type</span>
+                            <span class="font-semibold">${txType}</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-400">Holding Period</span>
+                            <span class="font-semibold ${isLongTerm ? 'text-green-400' : 'text-yellow-400'}">
+                                ${isLongTerm ? 'Long-term' : 'Short-term'}
+                            </span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-400">Tax Rate</span>
+                            <span class="font-semibold">${rate}%</span>
+                        </div>
+                        <hr class="border-gray-700">
+                        <div class="flex justify-between">
+                            <span class="text-gray-400">Gain/Loss</span>
+                            <span class="font-semibold">$${formatNumber(amount)}</span>
+                        </div>
+                        <div class="flex justify-between text-lg">
+                            <span class="font-semibold">Estimated Tax</span>
+                            <span class="font-bold text-red-400">$${formatNumber(taxAmount)}</span>
+                        </div>
+                    </div>
+                    <div class="mt-4 bg-blue-500/10 p-3 rounded-lg">
+                        <p class="text-xs text-gray-300">
+                            <i class="fas fa-info-circle mr-1 text-blue-400"></i>
+                            This is an estimate. Consult a tax professional for advice.
+                        </p>
+                    </div>
+                `;
+            }
+        });
+        
+        // Signals
+        document.getElementById('signal-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            if (!connectedWallet) {
+                showToast('Please connect your wallet first', 'error');
+                document.getElementById('wallet-modal').classList.add('active');
+                return;
+            }
+            
+            const recipient = document.getElementById('signal-recipient').value;
+            const amount = document.getElementById('signal-amount').value;
+            const message = document.getElementById('signal-message').value;
+            
+            if (!recipient || !amount || amount < 10) {
+                showToast('Minimum signal amount is 10 XRP', 'error');
+                return;
+            }
+            
+            showToast('Sending signal...', 'info');
+            // In real implementation, this would send a payment with memo
+            showToast('Signal sent successfully!', 'success');
+            document.getElementById('signal-form').reset();
+        });
+        
+        // Modal Functions
+        function closeModal(modalId) {
+            document.getElementById(modalId).classList.remove('active');
+        }
+        
+        // Toast Notifications
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            
+            const colors = {
+                success: 'bg-green-500',
+                error: 'bg-red-500',
+                info: 'bg-blue-500',
+                warning: 'bg-yellow-500'
+            };
+            
+            const icons = {
+                success: 'fa-check-circle',
+                error: 'fa-exclamation-circle',
+                info: 'fa-info-circle',
+                warning: 'fa-exclamation-triangle'
+            };
+            
+            toast.className = `${colors[type]} px-4 py-3 rounded-lg shadow-lg flex items-center gap-3 fade-in`;
+            toast.innerHTML = `
+                <i class="fas ${icons[type]}"></i>
+                <span class="text-sm">${message}</span>
+            `;
+            
+            container.appendChild(toast);
+            
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transform = 'translateX(100%)';
+                toast.style.transition = 'all 0.3s ease';
+                setTimeout(() => toast.remove(), 300);
+            }, 4000);
+        }
+        
+        // Utility Functions
+        function formatNumber(num) {
+            if (!num) return '0';
+            const n = parseFloat(num);
+            if (n >= 1e9) return (n / 1e9).toFixed(1) + 'B';
+            if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
+            if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K';
+            return n.toLocaleString();
+        }
+        
+        function getCountryFlag(code) {
+            const codePoints = code
+                .toUpperCase()
+                .split('')
+                .map(char => 127397 + char.charCodeAt(0));
+            return String.fromCodePoint(...codePoints);
+        }
+        
+        // Close modals on outside click
+        document.querySelectorAll('.modal').forEach(modal => {
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) {
+                    modal.classList.remove('active');
+                }
+            });
+        });
+        
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                document.querySelectorAll('.modal.active').forEach(modal => {
+                    modal.classList.remove('active');
+                });
+            }
+        });
+    </script>
+
+    <!-- Footer -->
+    <footer class="border-t border-white/10 py-8 mt-12">
+        <div class="container mx-auto px-4">
+            <div class="flex flex-col md:flex-row items-center justify-between gap-4">
+                <div class="flex items-center gap-2">
+                    <div class="w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center">
+                        <span class="font-bold text-sm">V</span>
+                    </div>
+                    <span class="text-sm text-gray-400">Verity Protocol &copy; 2024</span>
+                </div>
+                
+                <div class="flex items-center gap-6">
+                    <a href="https://github.com/SMMM25/Verity-Protocol-VRTY-" target="_blank" 
+                       class="text-gray-400 hover:text-white transition-colors">
+                        <i class="fab fa-github text-xl"></i>
+                    </a>
+                    <a href="#" class="text-gray-400 hover:text-white transition-colors">
+                        <i class="fab fa-twitter text-xl"></i>
+                    </a>
+                    <a href="#" class="text-gray-400 hover:text-white transition-colors">
+                        <i class="fab fa-discord text-xl"></i>
+                    </a>
+                </div>
+                
+                <div class="flex items-center gap-4 text-sm text-gray-400">
+                    <a href="/api/v1/docs" class="hover:text-white transition-colors">API Docs</a>
+                    <span>|</span>
+                    <span>Built on XRP Ledger</span>
+                </div>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>
