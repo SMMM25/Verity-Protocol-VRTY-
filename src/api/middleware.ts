@@ -197,12 +197,32 @@ export function corsOptionsMiddleware(
 // Helper functions
 function isPublicEndpoint(path: string): boolean {
   const publicPaths = [
+    '/',
+    '/ui',
+    '/api',
     '/api/v1/health',
     '/api/v1/status',
     '/api/v1/docs',
     '/api/v1/xrpl/info',
+    '/api/v1/token/info',
+    '/api/v1/token/tiers',
+    '/api/v1/token/fees',
+    '/api/v1/tax/jurisdictions',
+    '/api/v1/tax/methodology',
+    '/api/v1/governance/proposals',
+    '/api/v1/governance/stats',
+    '/api/v1/signals/algorithm',
+    '/api/v1/guilds',
+    '/api/v1/transparency',
+    '/api/v1/assets',
   ];
-  return publicPaths.some((p) => path.startsWith(p));
+  // Allow all UI paths and static assets
+  if (path.startsWith('/ui') || path.endsWith('.js') || path.endsWith('.css') || 
+      path.endsWith('.html') || path.endsWith('.png') || path.endsWith('.ico') ||
+      path.endsWith('.svg') || path.endsWith('.json')) {
+    return true;
+  }
+  return publicPaths.some((p) => path === p || path.startsWith(p + '/'));
 }
 
 function extractUserIdFromApiKey(apiKey: string): string {
