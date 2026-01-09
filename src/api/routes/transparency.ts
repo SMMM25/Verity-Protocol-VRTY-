@@ -1,6 +1,25 @@
 /**
- * Verity Protocol - Transparency Dashboard Routes
- * Public endpoints for protocol transparency and audit data
+ * @fileoverview Verity Protocol - Transparency Dashboard API Routes
+ * @module api/routes/transparency
+ * @description
+ * Public endpoints for protocol transparency and audit data.
+ * All data is publicly accessible without authentication.
+ * 
+ * @features
+ * - Protocol overview and configuration
+ * - Audit trail summaries
+ * - Tax jurisdiction coverage
+ * - XAO-DOW clawback policy details
+ * - Reputation algorithm transparency
+ * - Fee structure documentation
+ * 
+ * @transparency
+ * All endpoints return public data to ensure protocol transparency.
+ * No authentication required for read access.
+ * 
+ * @version 1.0.0
+ * @since Phase 1
+ * @author Verity Protocol Team
  */
 
 import { Router, Request, Response } from 'express';
@@ -14,9 +33,55 @@ import {
 
 const router = Router();
 
+// ============================================================
+// PROTOCOL OVERVIEW
+// ============================================================
+
 /**
- * GET /transparency/overview
- * Public protocol transparency overview
+ * @route GET /transparency/overview
+ * @group Transparency - Public Protocol Information
+ * @summary Get protocol transparency overview
+ * @description
+ * Returns comprehensive overview of the Verity Protocol including
+ * version, compliance status, coverage metrics, and feature list.
+ * 
+ * This is the main entry point for understanding the protocol's
+ * current state and capabilities.
+ * 
+ * @returns {object} 200 - Protocol overview
+ * @returns {object} data.protocol - Protocol info (name, version, description, network)
+ * @returns {object} data.compliance - Compliance flags (XAO-DOW, XLS-39D, governance)
+ * @returns {object} data.coverage - Coverage metrics (jurisdictions, regions)
+ * @returns {object} data.services - Service status
+ * @returns {object} data.stakingTiers - Tier configurations
+ * @returns {object} data.tokenomics - VRTY tokenomics
+ * @returns {Array<string>} data.features - Feature list
+ * 
+ * @example
+ * // Response
+ * {
+ *   "success": true,
+ *   "data": {
+ *     "protocol": {
+ *       "name": "Verity Protocol",
+ *       "version": "0.1.0",
+ *       "description": "The Verified Financial Operating System for XRP Ledger",
+ *       "network": "testnet"
+ *     },
+ *     "compliance": {
+ *       "xaoDownEnabled": true,
+ *       "xls39dCompliant": true,
+ *       "governanceControlled": true,
+ *       "publicAuditTrail": true
+ *     },
+ *     "coverage": {
+ *       "taxJurisdictions": 216,
+ *       "taxFriendlyJurisdictions": 79,
+ *       "holdingExemptionJurisdictions": 7,
+ *       "regions": 10
+ *     }
+ *   }
+ * }
  */
 router.get('/overview', async (req: Request, res: Response) => {
   res.json({
@@ -91,12 +156,52 @@ router.get('/overview', async (req: Request, res: Response) => {
   });
 });
 
+// ============================================================
+// AUDIT SUMMARY
+// ============================================================
+
 /**
- * GET /transparency/audit-summary
- * Public audit summary (no sensitive data)
+ * @route GET /transparency/audit-summary
+ * @group Transparency - Public Protocol Information
+ * @summary Get public audit summary
+ * @description
+ * Returns aggregated audit statistics without sensitive data.
+ * Shows protocol usage metrics and compliance configuration.
+ * 
+ * **Audit Categories:**
+ * - Asset issuance counts
+ * - Clawback execution counts
+ * - Signal activity metrics
+ * - Guild creation counts
+ * - Governance proposal counts
+ * - Tax calculation counts
+ * 
+ * @returns {object} 200 - Audit summary
+ * @returns {object} data.summary - Activity metrics
+ * @returns {object} data.compliance - Compliance configuration
+ * @returns {Date} data.lastAudit - Last audit timestamp
+ * 
+ * @example
+ * {
+ *   "success": true,
+ *   "data": {
+ *     "summary": {
+ *       "totalAssetsIssued": 150,
+ *       "totalClawbacksExecuted": 2,
+ *       "totalSignalsSent": 50000,
+ *       "totalGuildsCreated": 25,
+ *       "totalGovernanceProposals": 15,
+ *       "totalTaxCalculations": 100000
+ *     },
+ *     "compliance": {
+ *       "clawbackPolicy": { ... },
+ *       "assetVerification": { ... },
+ *       "auditTrail": { ... }
+ *     }
+ *   }
+ * }
  */
 router.get('/audit-summary', async (req: Request, res: Response) => {
-  // This would aggregate public audit data in production
   res.json({
     success: true,
     data: {
@@ -144,9 +249,55 @@ router.get('/audit-summary', async (req: Request, res: Response) => {
   });
 });
 
+// ============================================================
+// TAX JURISDICTION COVERAGE
+// ============================================================
+
 /**
- * GET /transparency/tax-coverage
- * Public tax jurisdiction coverage
+ * @route GET /transparency/tax-coverage
+ * @group Transparency - Public Protocol Information
+ * @summary Get tax jurisdiction coverage
+ * @description
+ * Returns detailed information about supported tax jurisdictions
+ * including regional breakdown and special categories.
+ * 
+ * **Coverage Highlights:**
+ * - 200+ jurisdictions worldwide
+ * - Tax-friendly jurisdiction identification
+ * - Holding period exemption tracking
+ * - Regional grouping
+ * 
+ * **Special Categories:**
+ * - Tax-Friendly: 0% capital gains (UAE, Bahamas, etc.)
+ * - Holding Exemption: Tax-free after holding period (Germany, Belgium)
+ * 
+ * @returns {object} 200 - Tax coverage information
+ * @returns {number} data.totalJurisdictions - Total jurisdictions supported
+ * @returns {object} data.byRegion - Count by region
+ * @returns {object} data.specialCategories - Special category details
+ * @returns {Array<string>} data.supportedCostBasisMethods - Cost basis methods
+ * @returns {Array<string>} data.supportedTransactionTypes - Transaction types
+ * @returns {object} data.methodology - Calculation methodology
+ * 
+ * @example
+ * {
+ *   "success": true,
+ *   "data": {
+ *     "totalJurisdictions": 216,
+ *     "byRegion": {
+ *       "Europe": 45,
+ *       "Asia-Pacific": 35,
+ *       "North America": 3,
+ *       ...
+ *     },
+ *     "specialCategories": {
+ *       "taxFriendly": {
+ *         "count": 79,
+ *         "examples": [...]
+ *       }
+ *     }
+ *   }
+ * }
  */
 router.get('/tax-coverage', async (req: Request, res: Response) => {
   const allJurisdictions = getSupportedJurisdictions();
@@ -207,9 +358,55 @@ router.get('/tax-coverage', async (req: Request, res: Response) => {
   });
 });
 
+// ============================================================
+// XAO-DOW CLAWBACK POLICY
+// ============================================================
+
 /**
- * GET /transparency/xao-dow-policy
- * Public XAO-DOW (clawback) policy
+ * @route GET /transparency/xao-dow-policy
+ * @group Transparency - Public Protocol Information
+ * @summary Get XAO-DOW clawback policy
+ * @description
+ * Returns the complete XAO-DOW (XLS-39D) clawback policy including
+ * allowed reasons, governance requirements, and transparency measures.
+ * 
+ * **XAO-DOW Features:**
+ * - Governance-controlled clawbacks
+ * - Multi-signature approval
+ * - 24-hour public comment period
+ * - Full justification required
+ * - Immutable audit trail
+ * 
+ * **Allowed Clawback Reasons:**
+ * - REGULATORY_REQUIREMENT: Regulatory authority mandate
+ * - COURT_ORDER: Legal court order
+ * - FRAUD_DETECTION: Detected fraudulent activity
+ * - SANCTIONS_COMPLIANCE: Sanctions list compliance
+ * - INVESTOR_PROTECTION: Protecting investors
+ * - ERROR_CORRECTION: Operational error correction
+ * 
+ * @returns {object} 200 - XAO-DOW policy details
+ * @returns {object} data.xaoDow - XAO-DOW info
+ * @returns {object} data.policy - Policy configuration
+ * @returns {object} data.constants - XRPL constants used
+ * @returns {object} data.transparency - Transparency measures
+ * 
+ * @example
+ * {
+ *   "success": true,
+ *   "data": {
+ *     "xaoDow": {
+ *       "name": "XLS-39D Clawback Implementation",
+ *       "version": "1.0.0"
+ *     },
+ *     "policy": {
+ *       "enabled": true,
+ *       "governanceControlled": true,
+ *       "minimumQuorum": 2,
+ *       "allowedReasons": [...]
+ *     }
+ *   }
+ * }
  */
 router.get('/xao-dow-policy', async (req: Request, res: Response) => {
   res.json({
@@ -282,9 +479,37 @@ router.get('/xao-dow-policy', async (req: Request, res: Response) => {
   });
 });
 
+// ============================================================
+// REPUTATION ALGORITHM
+// ============================================================
+
 /**
- * GET /transparency/reputation-algorithm
- * Public reputation algorithm details
+ * @route GET /transparency/reputation-algorithm
+ * @group Transparency - Public Protocol Information
+ * @summary Get reputation algorithm details
+ * @description
+ * Returns the complete Verity Signals reputation algorithm including
+ * formula, anti-manipulation measures, and transparency commitments.
+ * 
+ * **Reputation Formula:**
+ * ```
+ * receivedScore = log10(totalXRPReceived + 1) * 100
+ * sentScore = log10(totalXRPSent + 1) * 50
+ * engagementBonus = min(totalSignalsSent, totalSignalsReceived) * 0.5
+ * finalScore = round(receivedScore + sentScore + engagementBonus)
+ * ```
+ * 
+ * **Anti-Manipulation Measures:**
+ * - Minimum signal amount (10 drops)
+ * - Logarithmic scaling (limits whale influence)
+ * - On-chain XRP requirement (economic cost)
+ * - Sybil resistance via economic barriers
+ * 
+ * @returns {object} 200 - Reputation algorithm
+ * @returns {object} data.algorithm - Algorithm info
+ * @returns {object} data.formula - Complete formula breakdown
+ * @returns {Array<string>} data.antiManipulation - Anti-manipulation measures
+ * @returns {object} data.transparency - Transparency commitments
  */
 router.get('/reputation-algorithm', async (req: Request, res: Response) => {
   res.json({
@@ -329,9 +554,39 @@ router.get('/reputation-algorithm', async (req: Request, res: Response) => {
   });
 });
 
+// ============================================================
+// FEE STRUCTURE
+// ============================================================
+
 /**
- * GET /transparency/fee-structure
- * Public fee structure
+ * @route GET /transparency/fee-structure
+ * @group Transparency - Public Protocol Information
+ * @summary Get public fee structure
+ * @description
+ * Returns the complete protocol fee structure including base fees,
+ * staking discounts, and fee distribution.
+ * 
+ * **Base Fees (in basis points):**
+ * - DEX Trade: 10 bps (0.10%)
+ * - Asset Tokenization: 25 bps (0.25%)
+ * - Signal Send: 5 bps (0.05%)
+ * - Guild Operation: 15 bps (0.15%)
+ * 
+ * **Staking Discounts:**
+ * - BASIC (1,000 VRTY): 25% discount
+ * - PROFESSIONAL (10,000 VRTY): 50% discount
+ * - INSTITUTIONAL (50,000 VRTY): 75% discount
+ * - DEVELOPER (5,000 VRTY): 50% discount
+ * 
+ * **Fee Distribution:**
+ * - 80% to staker pool
+ * - 20% to buyback and burn
+ * 
+ * @returns {object} 200 - Fee structure
+ * @returns {object} data.baseFees - Base fee rates
+ * @returns {object} data.stakingDiscounts - Tier discounts
+ * @returns {object} data.feeDistribution - How fees are distributed
+ * @returns {object} data.vrtyPayment - VRTY payment options
  */
 router.get('/fee-structure', async (req: Request, res: Response) => {
   res.json({
