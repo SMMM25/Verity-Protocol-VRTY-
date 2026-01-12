@@ -45,6 +45,8 @@ temp/
 *.key
 secrets/
 .secrets/
+.vrty-credentials.json
+.vrty-mainnet-credentials.json
 
 # Package manager locks (keep one, ignore others based on preference)
 # package-lock.json
