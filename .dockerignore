@@ -39,9 +39,8 @@ docs
 # Examples
 examples
 
-# Development
+# Development - test files only
 *.test.ts
 tests
 vitest.config.ts
-tsconfig.json
-tsup.config.ts
+coverage
