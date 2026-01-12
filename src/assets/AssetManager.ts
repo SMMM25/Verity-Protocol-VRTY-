@@ -1,6 +1,11 @@
 /**
  * Verity Protocol - Asset Manager
  * Comprehensive RWA tokenization engine with verification
+ * 
+ * Fee Structure:
+ * - Asset Tokenization Fee: 0.25% (25 basis points)
+ * - Maximum Fee Cap: $25,000 USD
+ * - Minimum Fee: $100 USD (or equivalent in XRP)
  */
 
 import { Wallet, Payment, OfferCreate, CheckCreate } from 'xrpl';
@@ -19,6 +24,11 @@ import type {
   TransferRestriction,
   PropertyDetails,
 } from '../types/index.js';
+
+// Fee Constants
+const ASSET_TOKENIZATION_FEE_BPS = 25; // 0.25% in basis points
+const MAXIMUM_FEE_USD = 25000; // $25,000 USD cap
+const MINIMUM_FEE_USD = 100; // $100 USD minimum
 
 export interface AssetHolder {
   wallet: string;
@@ -52,6 +62,18 @@ export interface DEXListing {
 }
 
 /**
+ * Asset tokenization fee calculation result
+ */
+export interface TokenizationFee {
+  feeAmount: string;
+  feeCurrency: string;
+  feePercentage: number;
+  isCapped: boolean;
+  originalFee: string;
+  cappedAt?: string;
+}
+
+/**
  * Verity Asset Manager
  * Handles tokenization, distribution, dividends, and DEX operations
  */
@@ -77,6 +99,93 @@ export class VerityAssetManager extends EventEmitter {
     this.issuerWallet = issuerWallet;
 
     logger.info('Verity Asset Manager initialized');
+  }
+
+  /**
+   * Calculate tokenization fee with $25K USD cap
+   * Fee: 0.25% of asset value, capped at $25,000 USD
+   * 
+   * @param assetValueUSD - Total asset value in USD
+   * @returns TokenizationFee object with calculated fee details
+   */
+  calculateTokenizationFee(assetValueUSD: number): TokenizationFee {
+    // Calculate base fee (0.25%)
+    const baseFee = (assetValueUSD * ASSET_TOKENIZATION_FEE_BPS) / 10000;
+    
+    // Apply fee cap
+    let finalFee = baseFee;
+    let isCapped = false;
+    let cappedAt: string | undefined;
+
+    // Apply $25K maximum cap
+    if (baseFee > MAXIMUM_FEE_USD) {
+      finalFee = MAXIMUM_FEE_USD;
+      isCapped = true;
+      cappedAt = `$${MAXIMUM_FEE_USD.toLocaleString()} USD`;
+      logger.info(`Tokenization fee capped at $${MAXIMUM_FEE_USD}`, {
+        originalFee: baseFee,
+        assetValue: assetValueUSD,
+      });
+    }
+
+    // Apply minimum fee
+    if (finalFee < MINIMUM_FEE_USD) {
+      finalFee = MINIMUM_FEE_USD;
+    }
+
+    return {
+      feeAmount: finalFee.toFixed(2),
+      feeCurrency: 'USD',
+      feePercentage: ASSET_TOKENIZATION_FEE_BPS / 100,
+      isCapped,
+      originalFee: baseFee.toFixed(2),
+      cappedAt,
+    };
+  }
+
+  /**
+   * Get fee structure documentation
+   */
+  getFeeStructure(): Record<string, unknown> {
+    return {
+      assetTokenization: {
+        percentage: `${ASSET_TOKENIZATION_FEE_BPS / 100}%`,
+        basisPoints: ASSET_TOKENIZATION_FEE_BPS,
+        minimumFee: `$${MINIMUM_FEE_USD} USD`,
+        maximumFee: `$${MAXIMUM_FEE_USD.toLocaleString()} USD`,
+        description: 'Fee for tokenizing real-world assets on XRPL',
+        examples: [
+          {
+            assetValue: '$100,000',
+            fee: '$250',
+            calculation: '0.25% × $100,000',
+          },
+          {
+            assetValue: '$1,000,000',
+            fee: '$2,500',
+            calculation: '0.25% × $1,000,000',
+          },
+          {
+            assetValue: '$50,000,000',
+            fee: '$25,000 (capped)',
+            calculation: '0.25% = $125,000, capped at $25,000',
+          },
+        ],
+      },
+      feeDistribution: {
+        stakerPool: '80%',
+        buybackBurn: '20%',
+      },
+      discounts: {
+        payWithVRTY: '10% additional discount',
+        stakingTiers: [
+          { tier: 'BASIC', minStake: '1,000 VRTY', discount: '25%' },
+          { tier: 'PROFESSIONAL', minStake: '10,000 VRTY', discount: '50%' },
+          { tier: 'INSTITUTIONAL', minStake: '50,000 VRTY', discount: '75%' },
+          { tier: 'DEVELOPER', minStake: '5,000 VRTY', discount: '50%' },
+        ],
+      },
+    };
   }
 
   /**

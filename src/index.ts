@@ -16,6 +16,15 @@ export * from './token/index.js';
 export * from './tax/index.js';
 export * from './compliance/index.js';
 
+// Cross-Chain Bridge module
+export * from './bridge/index.js';
+
+// Mobile SDK module
+export * from './mobile/index.js';
+
+// Voice Commands module
+export * from './voice/index.js';
+
 // Types
 export * from './types/index.js';
 
@@ -26,4 +35,4 @@ export * from './utils/index.js';
 export { VeritySDK, default } from './sdk/index.js';
 
 // Version
-export const VERSION = '0.1.0';
+export const VERSION = '0.2.0';
