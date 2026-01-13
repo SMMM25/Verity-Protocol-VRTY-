@@ -65,6 +65,14 @@ solana/keys/*.json
 *-authority.json
 *-validator*.json
 
+# XRPL wallet files - CRITICAL: Never commit these!
+xrpl/config/*-wallet.json
+xrpl/config/bridge-escrow-wallet.json
+
+# Bridge deployment state (contains sensitive info)
+bridge-deployment-state.json
+bridge.env
+
 # Package manager locks (keep one, ignore others based on preference)
 # package-lock.json
 # yarn.lock
