@@ -21,10 +21,31 @@ import {
   corsOptionsMiddleware,
 } from './api/middleware.js';
 import { initializeXummAuth } from './api/middleware/xummAuth.js';
+import { connectDatabase, disconnectDatabase, checkDatabaseHealth } from './db/index.js';
 import { logger } from './utils/logger.js';
 
 // Load environment variables
 config();
+
+// Initialize database connection
+async function initializeDatabase(): Promise<void> {
+  if (process.env['DATABASE_URL']) {
+    try {
+      await connectDatabase();
+      const health = await checkDatabaseHealth();
+      if (health.connected) {
+        logger.info(`Database connected (latency: ${health.latency}ms)`);
+      }
+    } catch (error) {
+      logger.warn('Database connection failed - running in memory-only mode', { error });
+    }
+  } else {
+    logger.warn('DATABASE_URL not configured - running in memory-only mode');
+  }
+}
+
+// Initialize database
+initializeDatabase();
 
 // Initialize XUMM authentication if configured
 if (process.env['XUMM_API_KEY'] && process.env['XUMM_API_SECRET']) {
@@ -148,8 +169,12 @@ const server = app.listen(PORT, HOST, () => {
 });
 
 // Graceful shutdown
-const gracefulShutdown = (signal: string) => {
+const gracefulShutdown = async (signal: string) => {
   logger.info(`Received ${signal}, shutting down gracefully...`);
+  
+  // Disconnect database
+  await disconnectDatabase();
+  
   server.close(() => {
     logger.info('Server closed');
     process.exit(0);

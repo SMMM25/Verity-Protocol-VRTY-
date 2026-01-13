@@ -7,6 +7,7 @@
  */
 
 import { Router, Request, Response } from 'express';
+import { checkDatabaseHealth } from '../../db/index.js';
 
 const router = Router();
 
@@ -128,17 +129,23 @@ router.get('/', (req: Request, res: Response) => {
  *                       example: degraded
  */
 router.get('/detailed', async (req: Request, res: Response) => {
-  // In production, check actual service health
+  // Check actual database health
+  const dbHealth = await checkDatabaseHealth();
+  
   const services = {
     api: { status: 'healthy', latency: '< 1ms' },
     xrpl: { status: 'healthy', network: process.env['XRPL_NETWORK'] || 'testnet' },
-    database: { status: 'healthy' }, // Would check actual DB connection
+    database: { 
+      status: dbHealth.connected ? 'healthy' : 'unhealthy',
+      latency: dbHealth.latency ? `${dbHealth.latency}ms` : undefined,
+      error: dbHealth.error,
+    },
     cache: { status: 'healthy' }, // Would check Redis connection
   };
 
-  const allHealthy = Object.values(services).every(
-    (s) => s.status === 'healthy'
-  );
+  // API and DB are critical, cache is not
+  const allHealthy = services.api.status === 'healthy' && 
+                     services.database.status === 'healthy';
 
   res.status(allHealthy ? 200 : 503).json({
     success: allHealthy,
