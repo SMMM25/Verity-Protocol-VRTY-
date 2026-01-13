@@ -3,21 +3,26 @@
  * @module api/routes/token
  * @description
  * VRTY token operations including staking, rewards, and fee calculations.
+ * Now uses database-backed storage via Prisma repositories.
  * 
  * @features
  * - Token information and supply tracking
  * - Staking tier management (BASIC, PROFESSIONAL, INSTITUTIONAL, DEVELOPER)
- * - Stake/unstake operations
+ * - Stake/unstake operations (database-backed)
  * - Fee calculation with VRTY discounts
  * - Revenue and buyback history
  * 
- * @version 1.0.0
- * @since Phase 1
+ * @version 2.0.0
+ * @since Phase 2 - Database Integration
  * @author Verity Protocol Team
  */
 
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
+import { stakeRepository, calculateTier } from '../../db/repositories/stakeRepository.js';
+import { prisma, checkDatabaseHealth } from '../../db/client.js';
+import { clearTierCache } from '../middleware/rateLimit.js';
+import { logger } from '../../utils/logger.js';
 
 const router = Router();
 
@@ -27,23 +32,56 @@ const router = Router();
 
 /**
  * Schema for staking VRTY tokens
- * @constant {z.ZodObject}
  */
 const stakeSchema = z.object({
-  /** Amount of VRTY to stake (string for precision) */
   amount: z.string().min(1, 'Amount is required'),
-  /** Optional lock period in days for bonus rewards */
   lockPeriodDays: z.number().int().min(0).max(365).optional(),
+  wallet: z.string().min(1, 'Wallet address is required'),
 });
 
 /**
  * Schema for unstaking VRTY tokens
- * @constant {z.ZodObject}
  */
 const unstakeSchema = z.object({
-  /** Amount of VRTY to unstake (string for precision) */
   amount: z.string().min(1, 'Amount is required'),
+  wallet: z.string().min(1, 'Wallet address is required'),
 });
+
+// Staking tier configurations
+const STAKING_TIERS = [
+  {
+    tier: 'BASIC',
+    minStake: '1000',
+    feeDiscount: 2500,
+    features: ['Advanced portfolio analytics', 'Tax optimization', 'Priority support'],
+  },
+  {
+    tier: 'PROFESSIONAL',
+    minStake: '10000',
+    feeDiscount: 5000,
+    features: ['Guild creation', 'Advanced API access', 'White-label options', 'All Basic features'],
+  },
+  {
+    tier: 'INSTITUTIONAL',
+    minStake: '50000',
+    feeDiscount: 7500,
+    features: ['Asset tokenization', 'Regulatory dashboard', 'Dedicated management', 'All Professional features'],
+  },
+  {
+    tier: 'DEVELOPER',
+    minStake: '5000',
+    feeDiscount: 5000,
+    features: ['Full API access', 'Webhooks', 'Beta features', 'Developer support'],
+  },
+];
+
+// Base fee rates in basis points
+const BASE_FEES: Record<string, number> = {
+  DEX_TRADE: 10,
+  ASSET_TOKENIZATION: 25,
+  SIGNAL_SEND: 5,
+  GUILD_OPERATION: 15,
+};
 
 // ============================================================
 // TOKEN INFORMATION ENDPOINTS
@@ -51,131 +89,76 @@ const unstakeSchema = z.object({
 
 /**
  * @route GET /token/info
- * @group Token - VRTY Token Operations
- * @summary Get VRTY token information
- * @description
- * Returns comprehensive information about the VRTY token including
- * supply metrics, decimals, and issuer address.
- * 
- * @returns {object} 200 - Token information
- * @returns {boolean} success - Request success status
- * @returns {object} data - Token data
- * @returns {string} data.name - Token name ("Verity Protocol Token")
- * @returns {string} data.symbol - Token symbol ("VRTY")
- * @returns {string} data.totalSupply - Total supply (1,000,000,000)
- * @returns {string} data.circulatingSupply - Circulating supply
- * @returns {string} data.totalStaked - Total VRTY staked
- * @returns {string} data.totalBurned - Total VRTY burned via buyback
- * @returns {number} data.decimals - Token decimals (6)
- * @returns {string} data.issuer - XRPL issuer address
- * @returns {object} meta - Request metadata
- * 
- * @example
- * // Response
- * {
- *   "success": true,
- *   "data": {
- *     "name": "Verity Protocol Token",
- *     "symbol": "VRTY",
- *     "totalSupply": "1000000000",
- *     "circulatingSupply": "750000000",
- *     "totalStaked": "250000000",
- *     "totalBurned": "5000000",
- *     "decimals": 6,
- *     "issuer": "rVERITY..."
- *   }
- * }
+ * @summary Get VRTY token information with live database stats
  */
 router.get('/info', async (req: Request, res: Response) => {
-  res.json({
-    success: true,
-    data: {
-      name: 'Verity Protocol Token',
-      symbol: 'VRTY',
-      totalSupply: '1000000000',
-      circulatingSupply: '0', // Would be calculated
-      totalStaked: '0',
-      totalBurned: '0',
-      decimals: 6,
-      issuer: process.env['VERITY_ISSUER_ADDRESS'] || 'Not configured',
-    },
-    meta: {
-      requestId: req.requestId,
-      timestamp: new Date(),
-    },
-  });
+  try {
+    const dbHealth = await checkDatabaseHealth();
+    let totalStaked = '0';
+    let totalBurned = '0';
+    let stakerCount = 0;
+
+    if (dbHealth.connected) {
+      try {
+        totalStaked = (await stakeRepository.getTotalStaked()).toString();
+        const allStakes = await stakeRepository.getAllActiveStakes();
+        stakerCount = allStakes.length;
+        
+        // Get total burned from buyback burns
+        const burns = await prisma.buybackBurn.aggregate({
+          _sum: { vrtyBurned: true },
+        });
+        totalBurned = Number(burns._sum?.vrtyBurned || 0).toString();
+      } catch (error) {
+        logger.warn('Failed to fetch token stats from DB', { error });
+      }
+    }
+
+    const totalSupply = '1000000000';
+    const circulatingSupply = (
+      parseFloat(totalSupply) - parseFloat(totalBurned)
+    ).toString();
+
+    res.json({
+      success: true,
+      data: {
+        name: 'Verity Protocol Token',
+        symbol: 'VRTY',
+        totalSupply,
+        circulatingSupply,
+        totalStaked,
+        totalBurned,
+        stakerCount,
+        decimals: 6,
+        issuer: process.env['VERITY_ISSUER_ADDRESS'] || 'Not configured',
+        databaseConnected: dbHealth.connected,
+      },
+      meta: {
+        requestId: req.requestId,
+        timestamp: new Date(),
+      },
+    });
+  } catch (error) {
+    logger.error('Error fetching token info', { error });
+    res.status(500).json({
+      success: false,
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: 'Failed to fetch token information',
+      },
+      meta: { requestId: req.requestId, timestamp: new Date() },
+    });
+  }
 });
 
 /**
  * @route GET /token/tiers
- * @group Token - VRTY Token Operations
  * @summary Get staking tier configurations
- * @description
- * Returns all available staking tiers with minimum stake requirements,
- * fee discounts, and tier-specific features.
- * 
- * **Tier Levels:**
- * - BASIC (1,000 VRTY): 25% fee discount
- * - PROFESSIONAL (10,000 VRTY): 50% fee discount, guild creation
- * - INSTITUTIONAL (50,000 VRTY): 75% fee discount, asset tokenization
- * - DEVELOPER (5,000 VRTY): 50% fee discount, full API access
- * 
- * @returns {object} 200 - Tier configurations
- * @returns {boolean} success - Request success status
- * @returns {object} data - Tier data
- * @returns {Array<object>} data.tiers - Array of tier configurations
- * @returns {string} data.tiers[].tier - Tier name
- * @returns {string} data.tiers[].minStake - Minimum VRTY stake required
- * @returns {number} data.tiers[].feeDiscount - Fee discount in basis points
- * @returns {Array<string>} data.tiers[].features - Tier-specific features
- * 
- * @example
- * // Response
- * {
- *   "success": true,
- *   "data": {
- *     "tiers": [
- *       {
- *         "tier": "BASIC",
- *         "minStake": "1000",
- *         "feeDiscount": 2500,
- *         "features": ["Advanced portfolio analytics", "Tax optimization"]
- *       }
- *     ]
- *   }
- * }
  */
 router.get('/tiers', async (req: Request, res: Response) => {
   res.json({
     success: true,
-    data: {
-      tiers: [
-        {
-          tier: 'BASIC',
-          minStake: '1000',
-          feeDiscount: 2500,
-          features: ['Advanced portfolio analytics', 'Tax optimization', 'Priority support'],
-        },
-        {
-          tier: 'PROFESSIONAL',
-          minStake: '10000',
-          feeDiscount: 5000,
-          features: ['Guild creation', 'Advanced API access', 'White-label options', 'All Basic features'],
-        },
-        {
-          tier: 'INSTITUTIONAL',
-          minStake: '50000',
-          feeDiscount: 7500,
-          features: ['Asset tokenization', 'Regulatory dashboard', 'Dedicated management', 'All Professional features'],
-        },
-        {
-          tier: 'DEVELOPER',
-          minStake: '5000',
-          feeDiscount: 5000,
-          features: ['Full API access', 'Webhooks', 'Beta features', 'Developer support'],
-        },
-      ],
-    },
+    data: { tiers: STAKING_TIERS },
     meta: {
       requestId: req.requestId,
       timestamp: new Date(),
@@ -184,58 +167,61 @@ router.get('/tiers', async (req: Request, res: Response) => {
 });
 
 // ============================================================
-// STAKING ENDPOINTS
+// STAKING ENDPOINTS (DATABASE-BACKED)
 // ============================================================
 
 /**
  * @route POST /token/stake
- * @group Token - VRTY Token Operations
- * @summary Stake VRTY tokens
- * @description
- * Stakes VRTY tokens to earn protocol fee revenue share and unlock
- * tier-specific features. Requires wallet connection.
- * 
- * **Staking Benefits:**
- * - 80% of protocol fees distributed to stakers
- * - Tier-based fee discounts (25-75%)
- * - Governance voting rights
- * - Access to premium features
- * 
- * @param {object} request.body.required - Stake request
- * @param {string} request.body.amount.required - Amount of VRTY to stake
- * @param {number} request.body.lockPeriodDays - Lock period for bonus rewards
- * 
- * @returns {object} 201 - Stake initiated
- * @returns {object} 400 - Validation error
- * 
- * @example
- * // Request
- * {
- *   "amount": "10000",
- *   "lockPeriodDays": 90
- * }
- * 
- * // Response
- * {
- *   "success": true,
- *   "data": {
- *     "message": "Staking requires wallet connection",
- *     "stakeConfig": {
- *       "amount": "10000",
- *       "lockPeriodDays": 90
- *     }
- *   }
- * }
+ * @summary Stake VRTY tokens (persisted to database)
  */
 router.post('/stake', async (req: Request, res: Response) => {
   try {
     const validatedData = stakeSchema.parse(req.body);
+    const amount = parseFloat(validatedData.amount);
+
+    if (amount < 1000) {
+      res.status(400).json({
+        success: false,
+        error: {
+          code: 'INSUFFICIENT_AMOUNT',
+          message: 'Minimum stake is 1000 VRTY to reach BASIC tier',
+        },
+        meta: { requestId: req.requestId, timestamp: new Date() },
+      });
+      return;
+    }
+
+    // Create or update stake in database
+    const stake = await stakeRepository.upsertStake({
+      userId: validatedData.wallet, // Using wallet as userId for now
+      wallet: validatedData.wallet,
+      amount,
+      lockPeriodDays: validatedData.lockPeriodDays,
+    });
+
+    // Clear rate limit tier cache for this wallet
+    clearTierCache(validatedData.wallet);
+
+    logger.info('Stake created/updated', {
+      wallet: validatedData.wallet,
+      amount,
+      tier: stake.tier,
+    });
 
     res.status(201).json({
       success: true,
       data: {
-        message: 'Staking requires wallet connection',
-        stakeConfig: validatedData,
+        message: 'Stake created successfully',
+        stake: {
+          wallet: stake.wallet,
+          amount: Number(stake.amount).toString(),
+          tier: stake.tier,
+          stakedAt: stake.stakedAt,
+          lockEndDate: stake.lockEndDate,
+          rewardsEarned: Number(stake.rewardsEarned).toString(),
+          rewardsClaimed: Number(stake.rewardsClaimed).toString(),
+        },
+        note: 'For production, integrate with XUMM for wallet signature verification',
       },
       meta: {
         requestId: req.requestId,
@@ -251,112 +237,188 @@ router.post('/stake', async (req: Request, res: Response) => {
           message: 'Invalid request data',
           details: error.errors,
         },
+        meta: { requestId: req.requestId, timestamp: new Date() },
       });
       return;
     }
-    throw error;
+    logger.error('Stake error', { error });
+    res.status(500).json({
+      success: false,
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: (error as Error).message || 'Failed to create stake',
+      },
+      meta: { requestId: req.requestId, timestamp: new Date() },
+    });
   }
 });
 
 /**
  * @route POST /token/unstake
- * @group Token - VRTY Token Operations
- * @summary Unstake VRTY tokens
- * @description
- * Initiates unstaking of VRTY tokens. Subject to any lock period restrictions.
- * Requires wallet connection.
- * 
- * **Note:** Unstaking during a lock period may forfeit bonus rewards.
- * 
- * @param {object} request.body.required - Unstake request
- * @param {string} request.body.amount.required - Amount of VRTY to unstake
- * 
- * @returns {object} 200 - Unstake initiated
- * @returns {object} 400 - Validation error (amount required)
- * 
- * @example
- * // Request
- * {
- *   "amount": "5000"
- * }
+ * @summary Unstake VRTY tokens (updates database)
  */
 router.post('/unstake', async (req: Request, res: Response) => {
-  const { amount } = req.body;
+  try {
+    const validatedData = unstakeSchema.parse(req.body);
+    const amount = parseFloat(validatedData.amount);
 
-  if (!amount) {
-    res.status(400).json({
-      success: false,
-      error: {
-        code: 'VALIDATION_ERROR',
-        message: 'Amount is required',
+    // Reduce stake in database
+    const updatedStake = await stakeRepository.reduceStake({
+      userId: validatedData.wallet,
+      wallet: validatedData.wallet,
+      amount,
+    });
+
+    // Clear rate limit tier cache
+    clearTierCache(validatedData.wallet);
+
+    logger.info('Stake reduced', {
+      wallet: validatedData.wallet,
+      amountUnstaked: amount,
+      remainingStake: updatedStake ? Number(updatedStake.amount) : 0,
+    });
+
+    res.json({
+      success: true,
+      data: {
+        message: updatedStake && Number(updatedStake.amount) > 0
+          ? 'Partial unstake successful'
+          : 'Full unstake successful',
+        stake: updatedStake ? {
+          wallet: updatedStake.wallet,
+          amount: Number(updatedStake.amount).toString(),
+          tier: updatedStake.tier,
+        } : null,
+        amountUnstaked: amount.toString(),
+      },
+      meta: {
+        requestId: req.requestId,
+        timestamp: new Date(),
       },
     });
-    return;
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      res.status(400).json({
+        success: false,
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'Invalid request data',
+          details: error.errors,
+        },
+        meta: { requestId: req.requestId, timestamp: new Date() },
+      });
+      return;
+    }
+    
+    const errorMessage = (error as Error).message;
+    const statusCode = errorMessage.includes('No stake found') || 
+                       errorMessage.includes('Insufficient') ||
+                       errorMessage.includes('locked') ? 400 : 500;
+    
+    res.status(statusCode).json({
+      success: false,
+      error: {
+        code: statusCode === 400 ? 'BAD_REQUEST' : 'INTERNAL_ERROR',
+        message: errorMessage || 'Failed to unstake',
+      },
+      meta: { requestId: req.requestId, timestamp: new Date() },
+    });
   }
-
-  res.json({
-    success: true,
-    data: {
-      amount,
-      message: 'Unstaking requires wallet connection',
-    },
-    meta: {
-      requestId: req.requestId,
-      timestamp: new Date(),
-    },
-  });
 });
 
 /**
  * @route GET /token/stake/:wallet
- * @group Token - VRTY Token Operations
- * @summary Get stake information for a wallet
- * @description
- * Returns staking information for a specific wallet address including
- * staked amount, tier, lock status, and accumulated rewards.
- * 
- * @param {string} wallet.path.required - XRPL wallet address
- * 
- * @returns {object} 200 - Stake information
- * @returns {string} data.wallet - Wallet address
- * @returns {object|null} data.stake - Stake details (null if not staking)
- * @returns {string} data.stake.amount - Staked amount
- * @returns {string} data.stake.tier - Current tier
- * @returns {Date} data.stake.stakedAt - Stake timestamp
- * @returns {Date|null} data.stake.lockedUntil - Lock expiry (if locked)
- * @returns {string} data.stake.pendingRewards - Unclaimed rewards
- * 
- * @example
- * // Response (active staker)
- * {
- *   "success": true,
- *   "data": {
- *     "wallet": "rUser123...",
- *     "stake": {
- *       "amount": "15000",
- *       "tier": "PROFESSIONAL",
- *       "stakedAt": "2024-01-01T00:00:00Z",
- *       "lockedUntil": "2024-04-01T00:00:00Z",
- *       "pendingRewards": "250.50"
- *     }
- *   }
- * }
+ * @summary Get stake information for a wallet (from database)
  */
 router.get('/stake/:wallet', async (req: Request, res: Response) => {
-  const { wallet } = req.params;
+  try {
+    const wallet = req.params['wallet'] || '';
+    const stake = await stakeRepository.getByWallet(wallet);
 
-  res.json({
-    success: true,
-    data: {
-      wallet,
-      stake: null,
-      message: 'Stake lookup requires database connection',
-    },
-    meta: {
-      requestId: req.requestId,
-      timestamp: new Date(),
-    },
-  });
+    if (!stake || Number(stake.amount) <= 0) {
+      res.json({
+        success: true,
+        data: {
+          wallet,
+          stake: null,
+          message: 'No active stake found for this wallet',
+        },
+        meta: { requestId: req.requestId, timestamp: new Date() },
+      });
+      return;
+    }
+
+    const pendingRewards = Number(stake.rewardsEarned) - Number(stake.rewardsClaimed);
+
+    res.json({
+      success: true,
+      data: {
+        wallet,
+        stake: {
+          amount: Number(stake.amount).toString(),
+          tier: stake.tier,
+          stakedAt: stake.stakedAt,
+          lockedUntil: stake.lockEndDate,
+          lockPeriodDays: stake.lockPeriodDays,
+          pendingRewards: pendingRewards.toFixed(6),
+          rewardsEarned: Number(stake.rewardsEarned).toString(),
+          rewardsClaimed: Number(stake.rewardsClaimed).toString(),
+          lastRewardAt: stake.lastRewardAt,
+        },
+      },
+      meta: { requestId: req.requestId, timestamp: new Date() },
+    });
+  } catch (error) {
+    logger.error('Error fetching stake', { error, wallet: req.params['wallet'] });
+    res.status(500).json({
+      success: false,
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: 'Failed to fetch stake information',
+      },
+      meta: { requestId: req.requestId, timestamp: new Date() },
+    });
+  }
+});
+
+/**
+ * @route GET /token/stakers
+ * @summary Get all active stakers with pagination
+ */
+router.get('/stakers', async (req: Request, res: Response) => {
+  try {
+    const allStakes = await stakeRepository.getAllActiveStakes();
+    const tierCounts = await stakeRepository.getStakerCountByTier();
+    const totalStaked = await stakeRepository.getTotalStaked();
+
+    res.json({
+      success: true,
+      data: {
+        stakers: allStakes.map(s => ({
+          wallet: s.wallet,
+          amount: Number(s.amount).toString(),
+          tier: s.tier,
+          stakedAt: s.stakedAt,
+        })),
+        summary: {
+          totalStakers: allStakes.length,
+          totalStaked: totalStaked.toString(),
+          byTier: tierCounts,
+        },
+      },
+      meta: { requestId: req.requestId, timestamp: new Date() },
+    });
+  } catch (error) {
+    logger.error('Error fetching stakers', { error });
+    res.status(500).json({
+      success: false,
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: 'Failed to fetch stakers',
+      },
+      meta: { requestId: req.requestId, timestamp: new Date() },
+    });
+  }
 });
 
 // ============================================================
@@ -365,34 +427,52 @@ router.get('/stake/:wallet', async (req: Request, res: Response) => {
 
 /**
  * @route POST /token/rewards/claim
- * @group Token - VRTY Token Operations
  * @summary Claim staking rewards
- * @description
- * Claims accumulated staking rewards. Rewards are distributed from the
- * 80% staker pool based on stake weight and duration.
- * 
- * **Reward Distribution:**
- * - 80% of protocol fees go to staker pool
- * - Distributed proportionally by stake weight
- * - Higher tiers receive bonus multipliers
- * - Locked stakes receive additional bonus
- * 
- * @returns {object} 200 - Claim initiated
- * @returns {string} data.message - Status message
- * 
- * @security WalletAuth
  */
 router.post('/rewards/claim', async (req: Request, res: Response) => {
-  res.json({
-    success: true,
-    data: {
-      message: 'Reward claiming requires wallet connection',
-    },
-    meta: {
-      requestId: req.requestId,
-      timestamp: new Date(),
-    },
-  });
+  try {
+    const { wallet } = req.body;
+
+    if (!wallet) {
+      res.status(400).json({
+        success: false,
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'Wallet address is required',
+        },
+        meta: { requestId: req.requestId, timestamp: new Date() },
+      });
+      return;
+    }
+
+    const claimedAmount = await stakeRepository.claimRewards(wallet, wallet);
+
+    logger.info('Rewards claimed', { wallet, amount: claimedAmount });
+
+    res.json({
+      success: true,
+      data: {
+        message: 'Rewards claimed successfully',
+        claimedAmount: claimedAmount.toFixed(6),
+        wallet,
+        note: 'For production, XRPL transaction would be created to transfer rewards',
+      },
+      meta: { requestId: req.requestId, timestamp: new Date() },
+    });
+  } catch (error) {
+    const errorMessage = (error as Error).message;
+    const statusCode = errorMessage.includes('No stake') || 
+                       errorMessage.includes('No rewards') ? 400 : 500;
+    
+    res.status(statusCode).json({
+      success: false,
+      error: {
+        code: statusCode === 400 ? 'BAD_REQUEST' : 'INTERNAL_ERROR',
+        message: errorMessage || 'Failed to claim rewards',
+      },
+      meta: { requestId: req.requestId, timestamp: new Date() },
+    });
+  }
 });
 
 // ============================================================
@@ -401,47 +481,7 @@ router.post('/rewards/claim', async (req: Request, res: Response) => {
 
 /**
  * @route GET /token/fees/calculate
- * @group Token - VRTY Token Operations
- * @summary Calculate fees with VRTY discount
- * @description
- * Calculates protocol fees for various operations with applicable
- * VRTY staking discounts. Fees can be paid in XRP or VRTY (additional 10% discount).
- * 
- * **Base Fee Rates:**
- * - DEX_TRADE: 0.10% (10 bps)
- * - ASSET_TOKENIZATION: 0.25% (25 bps)
- * - SIGNAL_SEND: 0.05% (5 bps)
- * - GUILD_OPERATION: 0.15% (15 bps)
- * 
- * **Staking Discounts:**
- * - BASIC: 25% off
- * - PROFESSIONAL: 50% off
- * - INSTITUTIONAL: 75% off
- * - DEVELOPER: 50% off
- * - Pay with VRTY: Additional 10% off
- * 
- * @param {string} feeType.query.required - Fee type (DEX_TRADE, ASSET_TOKENIZATION, SIGNAL_SEND, GUILD_OPERATION)
- * @param {string} amount.query.required - Transaction amount
- * @param {string} wallet.query - Wallet address for tier lookup
- * @param {string} payWithVRTY.query - "true" to calculate VRTY payment discount
- * 
- * @returns {object} 200 - Fee calculation
- * @returns {object} 400 - Validation error
- * 
- * @example
- * // Request: GET /token/fees/calculate?feeType=DEX_TRADE&amount=1000&payWithVRTY=true
- * // Response
- * {
- *   "success": true,
- *   "data": {
- *     "feeType": "DEX_TRADE",
- *     "amount": "1000",
- *     "baseFee": "1.000000",
- *     "vrtyDiscount": "0.500000",
- *     "finalFee": "0.500000",
- *     "paidInVRTY": true
- *   }
- * }
+ * @summary Calculate fees with VRTY discount (uses database for tier lookup)
  */
 router.get('/fees/calculate', async (req: Request, res: Response) => {
   const { feeType, amount, wallet, payWithVRTY } = req.query;
@@ -453,37 +493,60 @@ router.get('/fees/calculate', async (req: Request, res: Response) => {
         code: 'VALIDATION_ERROR',
         message: 'Fee type and amount are required',
       },
+      meta: { requestId: req.requestId, timestamp: new Date() },
     });
     return;
   }
 
-  // Base fee rates in basis points (1 bp = 0.01%)
-  const baseFees: Record<string, number> = {
-    DEX_TRADE: 10,
-    ASSET_TOKENIZATION: 25,
-    SIGNAL_SEND: 5,
-    GUILD_OPERATION: 15,
-  };
+  try {
+    const baseFeeRate = BASE_FEES[feeType as string] || 10;
+    const baseFee = (parseFloat(amount as string) * baseFeeRate) / 10000;
 
-  const baseFeeRate = baseFees[feeType as string] || 10;
-  const baseFee = (parseFloat(amount as string) * baseFeeRate) / 10000;
-  const discount = payWithVRTY === 'true' ? baseFee * 0.5 : 0;
+    // Get tier discount from database
+    let tierDiscount = 0;
+    let userTier = 'NONE';
 
-  res.json({
-    success: true,
-    data: {
-      feeType,
-      amount,
-      baseFee: baseFee.toFixed(6),
-      vrtyDiscount: discount.toFixed(6),
-      finalFee: (baseFee - discount).toFixed(6),
-      paidInVRTY: payWithVRTY === 'true',
-    },
-    meta: {
-      requestId: req.requestId,
-      timestamp: new Date(),
-    },
-  });
+    if (wallet && typeof wallet === 'string') {
+      const tier = await stakeRepository.getUserTier(wallet);
+      userTier = tier;
+      const tierConfig = STAKING_TIERS.find(t => t.tier === tier);
+      if (tierConfig) {
+        tierDiscount = baseFee * (tierConfig.feeDiscount / 10000);
+      }
+    }
+
+    // Additional discount for VRTY payment
+    const vrtyPaymentDiscount = payWithVRTY === 'true' ? baseFee * 0.25 : 0;
+    const totalDiscount = Math.min(tierDiscount + vrtyPaymentDiscount, baseFee * 0.75); // Max 75%
+    const finalFee = baseFee - totalDiscount;
+
+    res.json({
+      success: true,
+      data: {
+        feeType,
+        amount,
+        userTier,
+        baseFee: baseFee.toFixed(6),
+        tierDiscount: tierDiscount.toFixed(6),
+        vrtyPaymentDiscount: vrtyPaymentDiscount.toFixed(6),
+        totalDiscount: totalDiscount.toFixed(6),
+        finalFee: finalFee.toFixed(6),
+        paidInVRTY: payWithVRTY === 'true',
+        discountPercentage: ((totalDiscount / baseFee) * 100).toFixed(2) + '%',
+      },
+      meta: { requestId: req.requestId, timestamp: new Date() },
+    });
+  } catch (error) {
+    logger.error('Fee calculation error', { error });
+    res.status(500).json({
+      success: false,
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: 'Failed to calculate fees',
+      },
+      meta: { requestId: req.requestId, timestamp: new Date() },
+    });
+  }
 });
 
 // ============================================================
@@ -492,111 +555,126 @@ router.get('/fees/calculate', async (req: Request, res: Response) => {
 
 /**
  * @route GET /token/revenue/history
- * @group Token - VRTY Token Operations
- * @summary Get revenue distribution history
- * @description
- * Returns historical revenue distributions to VRTY stakers.
- * 80% of all protocol fees are distributed to stakers.
- * 
- * @param {string} page.query - Page number (default: 1)
- * @param {string} limit.query - Items per page (default: 20)
- * 
- * @returns {object} 200 - Revenue history
- * @returns {Array<object>} data.distributions - Distribution records
- * @returns {string} data.distributions[].id - Distribution ID
- * @returns {string} data.distributions[].totalAmount - Total distributed
- * @returns {number} data.distributions[].stakerCount - Number of stakers
- * @returns {Date} data.distributions[].distributedAt - Distribution time
- * @returns {string} data.distributions[].transactionHash - XRPL transaction
- * @returns {object} meta.pagination - Pagination info
+ * @summary Get revenue distribution history from database
  */
 router.get('/revenue/history', async (req: Request, res: Response) => {
-  const { page = '1', limit = '20' } = req.query;
+  try {
+    const page = parseInt(req.query['page'] as string, 10) || 1;
+    const limit = Math.min(parseInt(req.query['limit'] as string, 10) || 20, 100);
+    const skip = (page - 1) * limit;
 
-  res.json({
-    success: true,
-    data: {
-      distributions: [],
-    },
-    meta: {
-      requestId: req.requestId,
-      timestamp: new Date(),
-      pagination: {
-        page: parseInt(page as string, 10),
-        pageSize: parseInt(limit as string, 10),
-        totalItems: 0,
-        totalPages: 0,
-        hasNext: false,
-        hasPrevious: false,
+    const [distributions, total] = await Promise.all([
+      prisma.revenueDistribution.findMany({
+        skip,
+        take: limit,
+        orderBy: { distributedAt: 'desc' },
+      }),
+      prisma.revenueDistribution.count(),
+    ]);
+
+    res.json({
+      success: true,
+      data: {
+        distributions: distributions.map(d => ({
+          id: d.id,
+          period: d.period,
+          totalRevenue: Number(d.totalRevenue).toString(),
+          stakerPool: Number(d.stakerPool).toString(),
+          buybackPool: Number(d.buybackPool).toString(),
+          rewardPerToken: Number(d.rewardPerToken).toString(),
+          distributedAt: d.distributedAt,
+        })),
       },
-    },
-  });
+      meta: {
+        requestId: req.requestId,
+        timestamp: new Date(),
+        pagination: {
+          page,
+          pageSize: limit,
+          totalItems: total,
+          totalPages: Math.ceil(total / limit),
+          hasNext: page * limit < total,
+          hasPrevious: page > 1,
+        },
+      },
+    });
+  } catch (error) {
+    logger.error('Error fetching revenue history', { error });
+    res.status(500).json({
+      success: false,
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: 'Failed to fetch revenue history',
+      },
+      meta: { requestId: req.requestId, timestamp: new Date() },
+    });
+  }
 });
 
 /**
  * @route GET /token/buyback/history
- * @group Token - VRTY Token Operations
- * @summary Get buyback and burn history
- * @description
- * Returns historical buyback and burn operations. 20% of protocol fees
- * are used to buy back and burn VRTY tokens, reducing supply.
- * 
- * **Buyback Mechanism:**
- * - 20% of protocol fees allocated to buyback
- * - VRTY purchased from XRPL DEX
- * - Purchased VRTY burned (sent to blackhole)
- * - Deflationary pressure on supply
- * 
- * @param {string} page.query - Page number (default: 1)
- * @param {string} limit.query - Items per page (default: 20)
- * 
- * @returns {object} 200 - Buyback history
- * @returns {Array<object>} data.burns - Burn records
- * @returns {string} data.burns[].id - Burn ID
- * @returns {string} data.burns[].amountBurned - VRTY burned
- * @returns {string} data.burns[].purchasePrice - XRP spent
- * @returns {Date} data.burns[].burnedAt - Burn timestamp
- * @returns {string} data.burns[].transactionHash - XRPL burn transaction
- * @returns {object} meta.pagination - Pagination info
- * 
- * @example
- * // Response
- * {
- *   "success": true,
- *   "data": {
- *     "burns": [
- *       {
- *         "id": "BURN_001",
- *         "amountBurned": "50000",
- *         "purchasePrice": "100",
- *         "burnedAt": "2024-01-15T12:00:00Z",
- *         "transactionHash": "ABC123..."
- *       }
- *     ]
- *   }
- * }
+ * @summary Get buyback and burn history from database
  */
 router.get('/buyback/history', async (req: Request, res: Response) => {
-  const { page = '1', limit = '20' } = req.query;
+  try {
+    const page = parseInt(req.query['page'] as string, 10) || 1;
+    const limit = Math.min(parseInt(req.query['limit'] as string, 10) || 20, 100);
+    const skip = (page - 1) * limit;
 
-  res.json({
-    success: true,
-    data: {
-      burns: [],
-    },
-    meta: {
-      requestId: req.requestId,
-      timestamp: new Date(),
-      pagination: {
-        page: parseInt(page as string, 10),
-        pageSize: parseInt(limit as string, 10),
-        totalItems: 0,
-        totalPages: 0,
-        hasNext: false,
-        hasPrevious: false,
+    const [burns, total] = await Promise.all([
+      prisma.buybackBurn.findMany({
+        skip,
+        take: limit,
+        orderBy: { executedAt: 'desc' },
+      }),
+      prisma.buybackBurn.count(),
+    ]);
+
+    // Get aggregate stats
+    const stats = await prisma.buybackBurn.aggregate({
+      _sum: { vrtyBurned: true },
+      _count: true,
+    });
+
+    res.json({
+      success: true,
+      data: {
+        burns: burns.map(b => ({
+          id: b.id,
+          amountBurned: Number(b.vrtyBurned).toString(),
+          averagePrice: Number(b.averagePrice).toString(),
+          burnedAt: b.executedAt,
+          transactionHash: b.burnTxHash,
+        })),
+        summary: {
+          totalBurned: Number(stats._sum?.vrtyBurned || 0).toString(),
+          totalOperations: stats._count,
+        },
       },
-    },
-  });
+      meta: {
+        requestId: req.requestId,
+        timestamp: new Date(),
+        pagination: {
+          page,
+          pageSize: limit,
+          totalItems: total,
+          totalPages: Math.ceil(total / limit),
+          hasNext: page * limit < total,
+          hasPrevious: page > 1,
+        },
+      },
+    });
+  } catch (error) {
+    logger.error('Error fetching buyback history', { error });
+    res.status(500).json({
+      success: false,
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: 'Failed to fetch buyback history',
+      },
+      meta: { requestId: req.requestId, timestamp: new Date() },
+    });
+  }
 });
 
 export { router as tokenRoutes };
