@@ -20,10 +20,26 @@ import {
   notFoundMiddleware,
   corsOptionsMiddleware,
 } from './api/middleware.js';
+import { initializeXummAuth } from './api/middleware/xummAuth.js';
 import { logger } from './utils/logger.js';
 
 // Load environment variables
 config();
+
+// Initialize XUMM authentication if configured
+if (process.env['XUMM_API_KEY'] && process.env['XUMM_API_SECRET']) {
+  try {
+    initializeXummAuth({
+      apiKey: process.env['XUMM_API_KEY'],
+      apiSecret: process.env['XUMM_API_SECRET'],
+    });
+    logger.info('XUMM authentication initialized');
+  } catch (error) {
+    logger.warn('Failed to initialize XUMM authentication', { error });
+  }
+} else {
+  logger.warn('XUMM credentials not configured - using development auth mode (x-wallet-address header)');
+}
 
 // Create Express app
 const app = express();
@@ -42,7 +58,7 @@ app.use(helmet({
 app.use(cors({
   origin: process.env['CORS_ORIGIN'] || '*',
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-API-Key', 'X-Request-ID'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-API-Key', 'X-Request-ID', 'X-Wallet-Address'],
   exposedHeaders: ['X-Request-ID'],
   credentials: true,
 }));
