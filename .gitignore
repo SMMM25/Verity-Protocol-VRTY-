@@ -59,6 +59,12 @@ secrets/
 wallet*.json
 keystore/
 
+# Solana keys - CRITICAL: Never commit these!
+solana/keys/*.json
+*.keypair
+*-authority.json
+*-validator*.json
+
 # Package manager locks (keep one, ignore others based on preference)
 # package-lock.json
 # yarn.lock
