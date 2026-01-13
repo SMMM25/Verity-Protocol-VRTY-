@@ -127,9 +127,9 @@ export async function initializeServices(config: ServiceConfig): Promise<void> {
  */
 export async function ensureServicesInitialized(): Promise<void> {
   if (!xrplClient) {
-    const network = (process.env.XRPL_NETWORK as XRPLNetwork) || 'testnet';
-    const issuerSeed = process.env.ISSUER_SEED;
-    const governanceSigners = process.env.GOVERNANCE_SIGNERS?.split(',').filter(Boolean);
+    const network = (process.env['XRPL_NETWORK'] as XRPLNetwork) || 'testnet';
+    const issuerSeed = process.env['ISSUER_SEED'];
+    const governanceSigners = process.env['GOVERNANCE_SIGNERS']?.split(',').filter(Boolean);
 
     await initializeServices({
       network,

@@ -268,7 +268,7 @@ router.post('/deeplink/parse', (req: Request, res: Response) => {
     const params: Record<string, string> = {};
 
     for (let i = 1; i < pathParts.length; i++) {
-      params[`param${i}`] = pathParts[i];
+      params[`param${i}`] = pathParts[i] ?? '';
     }
 
     parsed.searchParams.forEach((value, key) => {
