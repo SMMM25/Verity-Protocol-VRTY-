@@ -1,0 +1,581 @@
+// Verity Protocol - Prisma Schema
+// Database schema for stakes, proposals, guilds, and more
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// USER & AUTHENTICATION
+// ============================================================
+
+/// User account linked to XRPL wallet
+model User {
+  id              String    @id @default(cuid())
+  wallet          String    @unique /// XRPL wallet address (r...)
+  
+  // Profile
+  displayName     String?
+  email           String?   @unique
+  avatarUrl       String?
+  
+  // API Access
+  apiKeys         ApiKey[]
+  
+  // Staking
+  stakes          Stake[]
+  
+  // Governance
+  proposalsCreated Proposal[] @relation("ProposalCreator")
+  votes           Vote[]
+  
+  // Guild membership
+  guildMemberships GuildMember[]
+  guildsOwned     Guild[]   @relation("GuildOwner")
+  
+  // Compliance
+  kycStatus       KycStatus @default(NONE)
+  kycVerifiedAt   DateTime?
+  jurisdiction    String?
+  
+  // Timestamps
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  lastActiveAt    DateTime?
+
+  @@index([wallet])
+  @@index([kycStatus])
+}
+
+enum KycStatus {
+  NONE
+  PENDING
+  VERIFIED
+  REJECTED
+  EXPIRED
+}
+
+/// API Key for programmatic access
+model ApiKey {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  keyHash     String    @unique /// bcrypt hash of the API key
+  name        String    /// User-friendly name
+  prefix      String    /// First 8 chars for identification
+  
+  permissions String[]  /// Array of permission scopes
+  
+  lastUsedAt  DateTime?
+  expiresAt   DateTime?
+  revokedAt   DateTime?
+  
+  createdAt   DateTime  @default(now())
+
+  @@index([userId])
+  @@index([prefix])
+}
+
+// ============================================================
+// VRTY TOKEN & STAKING
+// ============================================================
+
+/// VRTY staking record
+model Stake {
+  id              String      @id @default(cuid())
+  
+  userId          String
+  user            User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  wallet          String      /// XRPL wallet address
+  
+  // Stake details
+  amount          Decimal     @db.Decimal(20, 6) /// Staked VRTY amount
+  tier            StakingTier
+  
+  // Lock period
+  lockEndDate     DateTime?   /// If locked, when lock expires
+  lockPeriodDays  Int?        /// Original lock period
+  
+  // Rewards
+  rewardsEarned   Decimal     @default(0) @db.Decimal(20, 6)
+  rewardsClaimed  Decimal     @default(0) @db.Decimal(20, 6)
+  lastRewardAt    DateTime?
+  
+  // Transaction references
+  stakeTxHash     String?     /// XRPL transaction hash
+  
+  // Timestamps
+  stakedAt        DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  unstakedAt      DateTime?
+
+  @@unique([userId, wallet])
+  @@index([wallet])
+  @@index([tier])
+  @@index([stakedAt])
+}
+
+enum StakingTier {
+  NONE
+  BASIC        /// 1,000+ VRTY
+  PROFESSIONAL /// 10,000+ VRTY
+  INSTITUTIONAL /// 50,000+ VRTY
+  DEVELOPER    /// 5,000+ VRTY
+}
+
+/// Revenue distribution record
+model RevenueDistribution {
+  id              String    @id @default(cuid())
+  
+  period          String    /// YYYY-MM format
+  totalRevenue    Decimal   @db.Decimal(20, 6) /// Total XRP revenue
+  stakerPool      Decimal   @db.Decimal(20, 6) /// 80% to stakers
+  buybackPool     Decimal   @db.Decimal(20, 6) /// 20% for buyback
+  rewardPerToken  Decimal   @db.Decimal(30, 12) /// Reward per staked VRTY
+  
+  totalStaked     Decimal   @db.Decimal(20, 6) /// Total VRTY staked at distribution
+  stakersCount    Int       /// Number of stakers
+  
+  // Transaction references
+  transactionHashes String[]
+  
+  distributedAt   DateTime  @default(now())
+
+  @@index([period])
+  @@index([distributedAt])
+}
+
+/// Buyback and burn record
+model BuybackBurn {
+  id              String    @id @default(cuid())
+  
+  xrpSpent        Decimal   @db.Decimal(20, 6) /// XRP used for buyback
+  vrtyBurned      Decimal   @db.Decimal(20, 6) /// VRTY tokens burned
+  averagePrice    Decimal   @db.Decimal(20, 6) /// Average price per VRTY
+  
+  // Transaction references
+  buybackTxHash   String?   /// DEX purchase transaction
+  burnTxHash      String?   /// Burn transaction
+  
+  executedAt      DateTime  @default(now())
+
+  @@index([executedAt])
+}
+
+// ============================================================
+// GOVERNANCE
+// ============================================================
+
+/// Governance proposal
+model Proposal {
+  id              String          @id @default(cuid())
+  
+  // Creator
+  proposerId      String
+  proposer        User            @relation("ProposalCreator", fields: [proposerId], references: [id])
+  proposerWallet  String          /// XRPL wallet that created proposal
+  
+  // Content
+  title           String
+  description     String          @db.Text
+  category        ProposalCategory
+  
+  // Execution
+  executionPayload String?        @db.Text /// JSON payload for automatic execution
+  
+  // Voting
+  status          ProposalStatus  @default(PENDING)
+  forVotes        Decimal         @default(0) @db.Decimal(20, 6)
+  againstVotes    Decimal         @default(0) @db.Decimal(20, 6)
+  abstainVotes    Decimal         @default(0) @db.Decimal(20, 6)
+  quorumReached   Boolean         @default(false)
+  
+  votes           Vote[]
+  
+  // Timeline
+  votingStartsAt  DateTime
+  votingEndsAt    DateTime
+  executedAt      DateTime?
+  cancelledAt     DateTime?
+  cancelReason    String?
+  
+  // Transaction reference
+  executionTxHash String?
+  
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@index([status])
+  @@index([category])
+  @@index([proposerId])
+  @@index([votingEndsAt])
+}
+
+enum ProposalCategory {
+  FEE_CHANGE
+  CLAWBACK_POLICY
+  ASSET_VERIFICATION
+  TREASURY_ALLOCATION
+  PROTOCOL_UPGRADE
+  PARAMETER_CHANGE
+  EMERGENCY
+}
+
+enum ProposalStatus {
+  PENDING     /// Waiting for voting to start
+  ACTIVE      /// Currently accepting votes
+  PASSED      /// Reached quorum with majority
+  FAILED      /// Did not pass
+  EXECUTED    /// Successfully executed
+  CANCELLED   /// Cancelled by proposer or governance
+  EXPIRED     /// Voting period ended without quorum
+}
+
+/// Vote on a proposal
+model Vote {
+  id              String    @id @default(cuid())
+  
+  proposalId      String
+  proposal        Proposal  @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  
+  voterId         String
+  voter           User      @relation(fields: [voterId], references: [id])
+  voterWallet     String    /// XRPL wallet that voted
+  
+  support         VoteType
+  voteWeight      Decimal   @db.Decimal(20, 6) /// Staked VRTY at time of vote
+  reason          String?   @db.Text
+  
+  // Transaction reference
+  txHash          String?   /// XRPL transaction hash
+  
+  votedAt         DateTime  @default(now())
+
+  @@unique([proposalId, voterId])
+  @@index([proposalId])
+  @@index([voterId])
+}
+
+enum VoteType {
+  FOR
+  AGAINST
+  ABSTAIN
+}
+
+// ============================================================
+// GUILDS
+// ============================================================
+
+/// Guild (DAO-like organization)
+model Guild {
+  id              String        @id @default(cuid())
+  
+  // Owner
+  ownerId         String
+  owner           User          @relation("GuildOwner", fields: [ownerId], references: [id])
+  
+  // Identity
+  name            String        @unique
+  description     String?       @db.Text
+  logoUrl         String?
+  websiteUrl      String?
+  
+  // Treasury
+  treasuryWallet  String        @unique /// XRPL wallet for guild treasury
+  treasuryBalance Decimal       @default(0) @db.Decimal(20, 6)
+  
+  // Configuration
+  membershipFee   Decimal?      @db.Decimal(20, 6) /// Fee to join guild
+  minStakeToJoin  Decimal?      @db.Decimal(20, 6) /// Minimum VRTY stake required
+  isPublic        Boolean       @default(true)
+  
+  // Stats
+  totalMembers    Int           @default(0)
+  totalRevenue    Decimal       @default(0) @db.Decimal(20, 6)
+  
+  // Relations
+  members         GuildMember[]
+  transactions    GuildTransaction[]
+  
+  // Timestamps
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  dissolvedAt     DateTime?
+
+  @@index([ownerId])
+  @@index([treasuryWallet])
+}
+
+/// Guild membership
+model GuildMember {
+  id              String      @id @default(cuid())
+  
+  guildId         String
+  guild           Guild       @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  
+  userId          String
+  user            User        @relation(fields: [userId], references: [id])
+  wallet          String      /// XRPL wallet
+  
+  role            GuildRole   @default(MEMBER)
+  sharePercentage Decimal     @default(0) @db.Decimal(5, 2) /// Revenue share %
+  
+  joinedAt        DateTime    @default(now())
+  leftAt          DateTime?
+
+  @@unique([guildId, userId])
+  @@index([guildId])
+  @@index([userId])
+}
+
+enum GuildRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+/// Guild treasury transaction
+model GuildTransaction {
+  id              String              @id @default(cuid())
+  
+  guildId         String
+  guild           Guild               @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  
+  type            GuildTransactionType
+  amount          Decimal             @db.Decimal(20, 6)
+  currency        String              @default("XRP")
+  
+  fromWallet      String?
+  toWallet        String?
+  
+  description     String?
+  txHash          String?             /// XRPL transaction hash
+  
+  createdAt       DateTime            @default(now())
+
+  @@index([guildId])
+  @@index([type])
+  @@index([createdAt])
+}
+
+enum GuildTransactionType {
+  DEPOSIT
+  WITHDRAWAL
+  FEE_COLLECTION
+  REVENUE_DISTRIBUTION
+  MEMBERSHIP_FEE
+}
+
+// ============================================================
+// COMPLIANCE & CLAWBACK
+// ============================================================
+
+/// Clawback proposal for compliance
+model ClawbackProposal {
+  id                  String              @id @default(cuid())
+  
+  // Target
+  asset               String              /// Asset currency code
+  targetWallet        String              /// Wallet to clawback from
+  amount              Decimal             @db.Decimal(20, 6)
+  
+  // Justification
+  reason              ClawbackReason
+  legalJustification  String              @db.Text
+  documentationUrls   String[]
+  
+  // Initiator
+  initiatorWallet     String
+  
+  // Status & voting
+  status              ClawbackStatus      @default(COMMENT_PERIOD)
+  
+  // Vote tallies
+  approveVotes        Int                 @default(0)
+  rejectVotes         Int                 @default(0)
+  abstainVotes        Int                 @default(0)
+  
+  // Comments & disputes
+  comments            ClawbackComment[]
+  disputes            ClawbackDispute[]
+  
+  // Timeline
+  commentPeriodEnds   DateTime            /// 24 hours after creation
+  votingEndsAt        DateTime?
+  executedAt          DateTime?
+  
+  // Transaction reference
+  executionTxHash     String?
+  
+  // Verification
+  verificationHash    String              @unique
+  
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+
+  @@index([status])
+  @@index([targetWallet])
+  @@index([asset])
+}
+
+enum ClawbackReason {
+  REGULATORY_REQUIREMENT
+  COURT_ORDER
+  FRAUD_DETECTION
+  SANCTIONS_COMPLIANCE
+  INVESTOR_PROTECTION
+  ERROR_CORRECTION
+}
+
+enum ClawbackStatus {
+  COMMENT_PERIOD  /// 24-hour public comment period
+  VOTING          /// Multi-sig voting
+  APPROVED        /// Approved, pending execution
+  EXECUTED        /// Clawback executed
+  REJECTED        /// Rejected by vote
+  CANCELLED       /// Cancelled by initiator
+  DISPUTED        /// Under dispute
+}
+
+/// Public comment on clawback proposal
+model ClawbackComment {
+  id              String            @id @default(cuid())
+  
+  proposalId      String
+  proposal        ClawbackProposal  @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  
+  authorWallet    String
+  content         String            @db.Text
+  supportClawback Boolean
+  
+  createdAt       DateTime          @default(now())
+
+  @@index([proposalId])
+}
+
+/// Dispute on clawback proposal
+model ClawbackDispute {
+  id              String            @id @default(cuid())
+  
+  proposalId      String
+  proposal        ClawbackProposal  @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  
+  filerWallet     String
+  reason          String            @db.Text
+  evidence        String[]
+  stakeAmount     Decimal           @db.Decimal(20, 6) /// VRTY staked for dispute
+  
+  status          DisputeStatus     @default(ACTIVE)
+  resolution      String?           @db.Text
+  resolvedBy      String[]          /// Wallets that resolved
+  
+  createdAt       DateTime          @default(now())
+  resolvedAt      DateTime?
+
+  @@index([proposalId])
+  @@index([status])
+}
+
+enum DisputeStatus {
+  ACTIVE
+  RESOLVED_CLAWBACK_CANCELLED
+  RESOLVED_CLAWBACK_PROCEEDS
+  RESOLVED_PARTIAL
+  STAKE_FORFEITED
+}
+
+// ============================================================
+// BRIDGE TRANSACTIONS
+// ============================================================
+
+/// Cross-chain bridge transaction
+model BridgeTransaction {
+  id                  String            @id @default(cuid())
+  
+  direction           BridgeDirection
+  sourceChain         String            /// 'XRPL', 'SOLANA', 'ETHEREUM'
+  destinationChain    String
+  
+  // Addresses
+  sourceAddress       String
+  destinationAddress  String
+  
+  // Amounts
+  amount              Decimal           @db.Decimal(20, 6)
+  fee                 Decimal           @db.Decimal(20, 6)
+  
+  // Status
+  status              BridgeStatus      @default(INITIATED)
+  
+  // Transaction hashes
+  sourceTxHash        String?
+  destinationTxHash   String?
+  
+  // Validator signatures
+  validatorSignatures Json?             /// Array of validator signatures
+  
+  // Verification
+  verificationHash    String            @unique
+  
+  // Error handling
+  errorMessage        String?
+  retryCount          Int               @default(0)
+  
+  createdAt           DateTime          @default(now())
+  completedAt         DateTime?
+
+  @@index([status])
+  @@index([sourceAddress])
+  @@index([destinationAddress])
+  @@index([sourceChain, destinationChain])
+}
+
+enum BridgeDirection {
+  XRPL_TO_SOLANA
+  SOLANA_TO_XRPL
+  XRPL_TO_ETHEREUM
+  ETHEREUM_TO_XRPL
+}
+
+enum BridgeStatus {
+  INITIATED
+  LOCKED
+  VALIDATING
+  MINTING
+  RELEASING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+// ============================================================
+// AUDIT LOG
+// ============================================================
+
+/// Audit log for compliance and transparency
+model AuditLog {
+  id              String    @id @default(cuid())
+  
+  action          String    /// Action type (e.g., 'STAKE_CREATED', 'PROPOSAL_VOTED')
+  actor           String    /// Wallet or system identifier
+  
+  entityType      String?   /// Type of entity affected
+  entityId        String?   /// ID of entity affected
+  
+  metadata        Json?     /// Additional context
+  ipAddress       String?
+  userAgent       String?
+  
+  createdAt       DateTime  @default(now())
+
+  @@index([action])
+  @@index([actor])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+}
