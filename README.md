@@ -343,15 +343,40 @@ API_HOST=0.0.0.0
 JWT_SECRET=your-jwt-secret
 ```
 
+## 🗺️ Development Roadmap
+
+See **[DEVELOPMENT_ROADMAP.md](DEVELOPMENT_ROADMAP.md)** for the complete development plan.
+
+### Current Status
+| Phase | Status | Description |
+|-------|--------|-------------|
+| Infrastructure | ✅ Complete | Database, Auth, Bridge, VRTY Integration |
+| Fee Relayer | 🔜 Next | Gasless transactions for users |
+| Escrow & Vesting | ⏳ Planned | Native XRPL vesting schedules |
+| AI Sentinel | ⏳ Planned | Rules-based fraud detection |
+| Cross-Chain | ⏳ Planned | Full XRPL ↔ Solana integration |
+
+### Token Distribution
+| Allocation | Percentage |
+|------------|------------|
+| Founder | 20% |
+| Treasury | 30% |
+| Ecosystem | 25% |
+| Community | 15% |
+| Liquidity | 10% |
+
 ## 🤝 Contributing
 
 We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
 
+**Important**: Update [DEVELOPMENT_ROADMAP.md](DEVELOPMENT_ROADMAP.md) on every commit affecting sprint tasks.
+
 1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+2. Create your feature branch (`git checkout -b feature/sprint-X-description`)
+3. Commit your changes (`git commit -m 'feat(sprint-X): description'`)
+4. **Update DEVELOPMENT_ROADMAP.md** with your progress
+5. Push to the branch (`git push origin feature/sprint-X-description`)
+6. Open a Pull Request
 
 ## 📚 Resources
 
