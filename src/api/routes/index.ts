@@ -5,6 +5,7 @@
 
 import { Router } from 'express';
 import { healthRoutes } from './health.js';
+import { authRoutes } from './auth.js';
 import { xrplRoutes } from './xrpl.js';
 import { assetsRoutes } from './assets.js';
 import { signalsRoutes } from './signals.js';
@@ -20,6 +21,7 @@ const router = Router();
 
 // Mount all routes
 router.use('/health', healthRoutes);
+router.use('/auth', authRoutes);
 router.use('/xrpl', xrplRoutes);
 router.use('/assets', assetsRoutes);
 router.use('/signals', signalsRoutes);
@@ -41,6 +43,7 @@ router.get('/docs', (req, res) => {
     description: 'The Verified Financial Operating System for XRP Ledger',
     endpoints: {
       health: '/api/v1/health',
+      auth: '/api/v1/auth',
       xrpl: '/api/v1/xrpl',
       assets: '/api/v1/assets',
       signals: '/api/v1/signals',
