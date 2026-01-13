@@ -25,7 +25,7 @@
 | Metric | Value |
 |--------|-------|
 | Total Timeline | 12-16 weeks |
-| Current Sprint | Sprint 2 - Escrow & Vesting (90% Complete) |
+| Current Sprint | Sprint 2 - Escrow & Vesting (100% Core Complete) |
 | Next Deliverable | Deploy wVRTY to Solana Mainnet, Sprint 3 |
 | Primary Network | XRPL Mainnet |
 | Bridge Network | Solana Devnet → Mainnet |
@@ -382,8 +382,9 @@ scripts/setup-founder-vesting.ts  # Founder vesting setup script
 | #24 | Fee Relayer implementation | ✅ Merged |
 | #25 | XRPL Escrow & Vesting | ✅ Merged |
 | #26 | Audit Fixes - PostgreSQL Migration | ✅ Merged |
+| #27 | Critical Audit Fixes - TypeScript Cleanup | ✅ Merged |
 
-### Audit Findings Resolved (PR #26) ✅
+### Audit Findings Resolved (PR #26, #27) ✅
 
 | Finding | Status | Resolution |
 |---------|--------|------------|
