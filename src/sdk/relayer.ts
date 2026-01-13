@@ -26,7 +26,9 @@
  * });
  */
 
-import { Wallet, Transaction, encode, hashSignedTx } from 'xrpl';
+import { Wallet, Transaction, encode, hashes } from 'xrpl';
+
+const { hashSignedTx } = hashes;
 
 /**
  * Relayer SDK configuration

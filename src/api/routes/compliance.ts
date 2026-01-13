@@ -84,16 +84,16 @@ function getOracle(): ComplianceOracle {
  * @route GET /compliance/proposals
  * @description Get all clawback proposals with optional filtering
  */
-router.get('/proposals', async (req: Request, res: Response, next: NextFunction) => {
+router.get('/proposals', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const oracle = getOracle();
     const status = req.query['status'] as string | undefined;
     
     let proposals;
     if (status) {
-      proposals = oracle.getProposalsByStatus(status as any);
+      proposals = await oracle.getProposalsByStatus(status as any);
     } else {
-      proposals = oracle.getAllProposals();
+      proposals = await oracle.getAllProposals();
     }
 
     res.json({
@@ -116,26 +116,28 @@ router.get('/proposals', async (req: Request, res: Response, next: NextFunction)
  * @route POST /compliance/proposals
  * @description Create a new clawback proposal (governance only)
  */
-router.post('/proposals', async (req: Request, res: Response, next: NextFunction) => {
+router.post('/proposals', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const validation = createProposalSchema.safeParse(req.body);
     if (!validation.success) {
-      return res.status(400).json({
+      res.status(400).json({
         success: false,
         error: 'VALIDATION_ERROR',
         message: 'Invalid proposal data',
         details: validation.error.errors,
       });
+      return;
     }
 
     // Get initiator from authenticated user (would use real auth in production)
     const initiator = req.headers['x-wallet-address'] as string;
     if (!initiator) {
-      return res.status(401).json({
+      res.status(401).json({
         success: false,
         error: 'UNAUTHORIZED',
         message: 'Wallet connection required',
       });
+      return;
     }
 
     const oracle = getOracle();
@@ -169,25 +171,26 @@ router.post('/proposals', async (req: Request, res: Response, next: NextFunction
  * @route GET /compliance/proposals/:proposalId
  * @description Get a specific proposal with full details
  */
-router.get('/proposals/:proposalId', async (req: Request, res: Response, next: NextFunction) => {
+router.get('/proposals/:proposalId', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const oracle = getOracle();
     const proposalId = req.params['proposalId'] || '';
 
-    const proposal = oracle.getProposal(proposalId);
+    const proposal = await oracle.getProposal(proposalId);
     if (!proposal) {
-      return res.status(404).json({
+      res.status(404).json({
         success: false,
         error: 'NOT_FOUND',
         message: `Proposal ${proposalId} not found`,
       });
+      return;
     }
 
     // Include related data
-    const comments = oracle.getProposalComments(proposalId);
-    const disputes = oracle.getProposalDisputes(proposalId);
-    const history = oracle.getProposalHistory(proposalId);
-    const integrity = oracle.verifyProposalIntegrity(proposalId);
+    const comments = await oracle.getProposalComments(proposalId);
+    const disputes = await oracle.getProposalDisputes(proposalId);
+    const history = await oracle.getProposalHistory(proposalId);
+    const integrity = await oracle.verifyProposalIntegrity(proposalId);
 
     res.json({
       success: true,
@@ -212,7 +215,7 @@ router.get('/proposals/:proposalId', async (req: Request, res: Response, next: N
  * @route DELETE /compliance/proposals/:proposalId
  * @description Cancel a proposal
  */
-router.delete('/proposals/:proposalId', async (req: Request, res: Response, next: NextFunction) => {
+router.delete('/proposals/:proposalId', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const oracle = getOracle();
     const proposalId = req.params['proposalId'] || '';
@@ -220,14 +223,15 @@ router.delete('/proposals/:proposalId', async (req: Request, res: Response, next
     const reason = (req.query['reason'] as string) || 'No reason provided';
 
     if (!canceller) {
-      return res.status(401).json({
+      res.status(401).json({
         success: false,
         error: 'UNAUTHORIZED',
         message: 'Wallet connection required',
       });
+      return;
     }
 
-    const proposal = oracle.cancelProposal(proposalId, canceller, reason);
+    const proposal = await oracle.cancelProposal(proposalId, reason);
 
     res.json({
       success: true,
@@ -250,16 +254,16 @@ router.delete('/proposals/:proposalId', async (req: Request, res: Response, next
  * @route GET /compliance/proposals/:proposalId/comments
  * @description Get all comments for a proposal
  */
-router.get('/proposals/:proposalId/comments', async (req: Request, res: Response, next: NextFunction) => {
+router.get('/proposals/:proposalId/comments', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const oracle = getOracle();
     const proposalId = req.params['proposalId'] || '';
 
-    const comments = oracle.getProposalComments(proposalId);
+    const comments = await oracle.getProposalComments(proposalId);
     
     // Calculate sentiment
-    const supporting = comments.filter(c => c.supportClawback).length;
-    const opposing = comments.filter(c => !c.supportClawback).length;
+    const supporting = comments.filter((c: any) => c.supportClawback).length;
+    const opposing = comments.filter((c: any) => !c.supportClawback).length;
 
     res.json({
       success: true,
@@ -286,16 +290,17 @@ router.get('/proposals/:proposalId/comments', async (req: Request, res: Response
  * @route POST /compliance/proposals/:proposalId/comments
  * @description Add a public comment to a proposal
  */
-router.post('/proposals/:proposalId/comments', async (req: Request, res: Response, next: NextFunction) => {
+router.post('/proposals/:proposalId/comments', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const validation = addCommentSchema.safeParse(req.body);
     if (!validation.success) {
-      return res.status(400).json({
+      res.status(400).json({
         success: false,
         error: 'VALIDATION_ERROR',
         message: 'Invalid comment data',
         details: validation.error.errors,
       });
+      return;
     }
 
     const oracle = getOracle();
@@ -303,7 +308,7 @@ router.post('/proposals/:proposalId/comments', async (req: Request, res: Respons
     const author = req.headers['x-wallet-address'] as string || 'anonymous';
     const { content, supportClawback } = validation.data;
 
-    const comment = oracle.addPublicComment(proposalId, author, content, supportClawback);
+    const comment = await oracle.addPublicComment(proposalId, author, content, supportClawback);
 
     res.status(201).json({
       success: true,
@@ -326,32 +331,34 @@ router.post('/proposals/:proposalId/comments', async (req: Request, res: Respons
  * @route POST /compliance/proposals/:proposalId/votes
  * @description Cast a governance vote on a proposal
  */
-router.post('/proposals/:proposalId/votes', async (req: Request, res: Response, next: NextFunction) => {
+router.post('/proposals/:proposalId/votes', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const validation = castVoteSchema.safeParse(req.body);
     if (!validation.success) {
-      return res.status(400).json({
+      res.status(400).json({
         success: false,
         error: 'VALIDATION_ERROR',
         message: 'Invalid vote data',
         details: validation.error.errors,
       });
+      return;
     }
 
     const voter = req.headers['x-wallet-address'] as string;
     if (!voter) {
-      return res.status(401).json({
+      res.status(401).json({
         success: false,
         error: 'UNAUTHORIZED',
         message: 'Wallet connection required',
       });
+      return;
     }
 
     const oracle = getOracle();
     const proposalId = req.params['proposalId'] || '';
     const { vote, reason, signature } = validation.data;
 
-    const voteResult = oracle.castVote(proposalId, voter, vote, reason, signature);
+    const voteResult = await oracle.castVote(proposalId, voter, vote, reason, signature);
 
     res.status(201).json({
       success: true,
@@ -374,19 +381,19 @@ router.post('/proposals/:proposalId/votes', async (req: Request, res: Response, 
  * @route GET /compliance/proposals/:proposalId/disputes
  * @description Get all disputes for a proposal
  */
-router.get('/proposals/:proposalId/disputes', async (req: Request, res: Response, next: NextFunction) => {
+router.get('/proposals/:proposalId/disputes', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const oracle = getOracle();
     const proposalId = req.params['proposalId'] || '';
 
-    const disputes = oracle.getProposalDisputes(proposalId);
+    const disputes = await oracle.getProposalDisputes(proposalId);
 
     res.json({
       success: true,
       data: {
         disputes,
         count: disputes.length,
-        activeCount: disputes.filter(d => d.status === 'active').length,
+        activeCount: disputes.filter((d: any) => d.status === 'ACTIVE').length,
       },
       meta: {
         requestId: req.headers['x-request-id'] || 'unknown',
@@ -402,25 +409,27 @@ router.get('/proposals/:proposalId/disputes', async (req: Request, res: Response
  * @route POST /compliance/proposals/:proposalId/disputes
  * @description File a dispute against a proposal
  */
-router.post('/proposals/:proposalId/disputes', async (req: Request, res: Response, next: NextFunction) => {
+router.post('/proposals/:proposalId/disputes', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const validation = fileDisputeSchema.safeParse(req.body);
     if (!validation.success) {
-      return res.status(400).json({
+      res.status(400).json({
         success: false,
         error: 'VALIDATION_ERROR',
         message: 'Invalid dispute data',
         details: validation.error.errors,
       });
+      return;
     }
 
     const filer = req.headers['x-wallet-address'] as string;
     if (!filer) {
-      return res.status(401).json({
+      res.status(401).json({
         success: false,
         error: 'UNAUTHORIZED',
         message: 'Wallet connection required',
       });
+      return;
     }
 
     const oracle = getOracle();
@@ -447,37 +456,38 @@ router.post('/proposals/:proposalId/disputes', async (req: Request, res: Respons
  * @route POST /compliance/proposals/:proposalId/disputes/:disputeId/resolve
  * @description Resolve a dispute (governance only)
  */
-router.post('/proposals/:proposalId/disputes/:disputeId/resolve', async (req: Request, res: Response, next: NextFunction) => {
+router.post('/proposals/:proposalId/disputes/:disputeId/resolve', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const validation = resolveDisputeSchema.safeParse(req.body);
     if (!validation.success) {
-      return res.status(400).json({
+      res.status(400).json({
         success: false,
         error: 'VALIDATION_ERROR',
         message: 'Invalid resolution data',
         details: validation.error.errors,
       });
+      return;
     }
 
     const decider = req.headers['x-wallet-address'] as string;
     if (!decider) {
-      return res.status(401).json({
+      res.status(401).json({
         success: false,
         error: 'UNAUTHORIZED',
         message: 'Wallet connection required',
       });
+      return;
     }
 
     // In production, would collect signatures from multiple governance members
     const decidedBy = [decider]; // Simplified for now
 
     const oracle = getOracle();
-    const proposalId = req.params['proposalId'] || '';
     const disputeId = req.params['disputeId'] || '';
     const { decision, rationale, partialAmount } = validation.data;
 
-    const dispute = oracle.resolveDispute(
-      proposalId,
+    // resolveDispute(disputeId, resolvers, decision, rationale, partialAmount?)
+    const dispute = await oracle.resolveDispute(
       disputeId,
       decidedBy,
       decision,
@@ -506,15 +516,16 @@ router.post('/proposals/:proposalId/disputes/:disputeId/resolve', async (req: Re
  * @route POST /compliance/proposals/:proposalId/execute
  * @description Execute an approved clawback (governance only)
  */
-router.post('/proposals/:proposalId/execute', async (req: Request, res: Response, next: NextFunction) => {
+router.post('/proposals/:proposalId/execute', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const executor = req.headers['x-wallet-address'] as string;
     if (!executor) {
-      return res.status(401).json({
+      res.status(401).json({
         success: false,
         error: 'UNAUTHORIZED',
         message: 'Wallet connection required',
       });
+      return;
     }
 
     // In production, would verify wallet signature
@@ -536,13 +547,13 @@ router.post('/proposals/:proposalId/execute', async (req: Request, res: Response
  * @route GET /compliance/transparency
  * @description Get full transparency ledger
  */
-router.get('/transparency', async (req: Request, res: Response, next: NextFunction) => {
+router.get('/transparency', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const oracle = getOracle();
     const limit = parseInt(req.query['limit'] as string) || 100;
     const offset = parseInt(req.query['offset'] as string) || 0;
 
-    const ledger = oracle.getTransparencyLedger();
+    const ledger = await oracle.getTransparencyLedger();
     const paginatedLedger = ledger.slice(offset, offset + limit);
 
     res.json({
@@ -567,12 +578,12 @@ router.get('/transparency', async (req: Request, res: Response, next: NextFuncti
  * @route GET /compliance/transparency/:proposalId
  * @description Get transparency ledger for a specific proposal
  */
-router.get('/transparency/:proposalId', async (req: Request, res: Response, next: NextFunction) => {
+router.get('/transparency/:proposalId', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const oracle = getOracle();
     const proposalId = req.params['proposalId'] || '';
 
-    const history = oracle.getProposalHistory(proposalId);
+    const history = await oracle.getProposalHistory(proposalId);
 
     res.json({
       success: true,
@@ -599,10 +610,10 @@ router.get('/transparency/:proposalId', async (req: Request, res: Response, next
  * @route GET /compliance/stats
  * @description Get governance statistics (public transparency)
  */
-router.get('/stats', async (req: Request, res: Response, next: NextFunction) => {
+router.get('/stats', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const oracle = getOracle();
-    const stats = oracle.getGovernanceStats();
+    const stats = await oracle.getGovernanceStats();
 
     res.json({
       success: true,
@@ -621,7 +632,7 @@ router.get('/stats', async (req: Request, res: Response, next: NextFunction) => 
  * @route GET /compliance/config
  * @description Get oracle configuration (public transparency)
  */
-router.get('/config', async (req: Request, res: Response, next: NextFunction) => {
+router.get('/config', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const oracle = getOracle();
     const config = oracle.getOracleConfig();

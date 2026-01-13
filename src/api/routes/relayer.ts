@@ -360,7 +360,7 @@ router.get('/quota/:address', async (req: Request, res: Response): Promise<void>
  */
 router.get('/status/:transactionId', async (req: Request, res: Response): Promise<void> => {
   const requestId = req.headers['x-request-id'] as string || 'unknown';
-  const { transactionId } = req.params;
+  const transactionId = req.params['transactionId'] ?? '';
 
   try {
     const tx = await relayerService.getTransactionStatus(transactionId);

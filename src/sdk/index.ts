@@ -379,52 +379,68 @@ class VeritySignalsModule {
 class VerityGuildsModule {
   constructor(private treasury: VerityGuildTreasury) {}
 
-  async create(founderWallet: Wallet, config: GuildConfig, initialSigners: string[]) {
-    return this.treasury.createGuild(founderWallet, config, initialSigners);
+  async create(
+    founderWallet: Wallet,
+    config: {
+      name: string;
+      description?: string;
+      treasuryRules: any;
+      isPublic?: boolean;
+      membershipFee?: number;
+      minStakeToJoin?: number;
+    },
+    initialSigners: string[],
+    founderId: string
+  ) {
+    return this.treasury.createGuild(founderWallet, config, initialSigners, founderId);
   }
 
-  addMember(guildId: string, member: any) {
-    return this.treasury.addMember(guildId, member);
+  async addMember(guildId: string, wallet: string, userId: string, role?: string, sharePercentage?: number) {
+    return this.treasury.addMember(guildId, wallet, userId, role as any, sharePercentage);
   }
 
-  updateShares(guildId: string, shares: any[]) {
+  async updateShares(guildId: string, shares: any[]) {
     return this.treasury.updateMemberShares(guildId, shares);
   }
 
-  createPaymentRequest(guildId: string, requester: string, payee: string, amount: string, currency: string, description: string) {
-    return this.treasury.createPaymentRequest(guildId, requester, payee, amount, currency, description);
+  async createPaymentRequest(guildId: string, requesterId: string, requesterWallet: string, payee: string, amount: string, currency: string, description: string) {
+    return this.treasury.createPaymentRequest(guildId, requesterId, requesterWallet, payee, amount, currency, description);
   }
 
-  signPayment(requestId: string, signer: string, approved: boolean) {
-    return this.treasury.signPaymentRequest(requestId, signer, approved);
+  async signPayment(transactionId: string, signerId: string, signerWallet: string, approved: boolean) {
+    return this.treasury.signPaymentRequest(transactionId, signerId, signerWallet, approved);
   }
 
   async executePayment(requestId: string, treasuryWallet: Wallet) {
     return this.treasury.executePayment(requestId, treasuryWallet);
   }
 
-  async executePayroll(guildId: string, treasuryWallet: Wallet) {
-    return this.treasury.executeVerifiedPayroll(guildId, treasuryWallet);
-  }
-
-  async distributeRevenue(guildId: string, treasuryWallet: Wallet, totalAmount: string, currency: string) {
-    return this.treasury.distributeRevenue(guildId, treasuryWallet, totalAmount, currency);
-  }
-
   get(guildId: string) {
     return this.treasury.getGuild(guildId);
   }
 
-  getAll() {
-    return this.treasury.getAllGuilds();
+  async getAll(options?: { isPublic?: boolean; limit?: number; offset?: number }) {
+    return this.treasury.listGuilds(options);
   }
 
-  getByMember(wallet: string) {
-    return this.treasury.getGuildsByMember(wallet);
+  async getByWallet(wallet: string) {
+    return this.treasury.getGuildByWallet(wallet);
   }
 
-  getAuditTrail(guildId: string) {
-    return this.treasury.getGuildAuditTrail(guildId);
+  async getStats(guildId: string) {
+    return this.treasury.getGuildStats(guildId);
+  }
+
+  async getTransactions(guildId: string, limit?: number) {
+    return this.treasury.getTransactions(guildId, limit);
+  }
+
+  async getPendingPayments(guildId: string) {
+    return this.treasury.getPendingPayments(guildId);
+  }
+
+  async dissolve(guildId: string, ownerId: string) {
+    return this.treasury.dissolveGuild(guildId, ownerId);
   }
 }
 

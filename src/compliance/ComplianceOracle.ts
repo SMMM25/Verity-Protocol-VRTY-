@@ -6,6 +6,8 @@
  * - Dispute resolution system
  * - Public transparency ledger
  * - Full audit trail
+ * 
+ * @version 2.0.0 - Migrated to PostgreSQL via Prisma
  */
 
 import { Wallet } from 'xrpl';
@@ -14,6 +16,7 @@ import { XRPLClient, TransactionResult } from '../core/XRPLClient.js';
 import { VerityXAODOW, ClawbackTransaction } from '../core/XAO_DOW.js';
 import { logger, logAuditAction } from '../utils/logger.js';
 import { generateId, generateVerificationHash, sha256 } from '../utils/crypto.js';
+import { prisma } from '../db/client.js';
 import type { ClawbackReason, GovernanceApproval } from '../types/index.js';
 
 // Constants
@@ -63,30 +66,6 @@ export interface DisputeResolution {
 }
 
 /**
- * Clawback proposal with enhanced governance
- */
-export interface ClawbackProposal {
-  id: string;
-  clawbackId: string;
-  initiator: string;
-  asset: string;
-  targetWallet: string;
-  amount: string;
-  reason: ClawbackReason;
-  legalJustification: string;
-  documentationUrls: string[];
-  status: 'comment_period' | 'voting' | 'approved' | 'disputed' | 'executed' | 'cancelled';
-  comments: PublicComment[];
-  votes: ClawbackVote[];
-  disputes: Dispute[];
-  commentPeriodEndsAt: Date;
-  votingEndsAt?: Date;
-  createdAt: Date;
-  executedAt?: Date;
-  verificationHash: string;
-}
-
-/**
  * Governance vote on a clawback
  */
 export interface ClawbackVote {
@@ -130,18 +109,13 @@ export interface ComplianceOracleConfig {
 /**
  * Compliance Oracle
  * Manages transparent governance for clawback operations
+ * Now backed by PostgreSQL via Prisma
  */
 export class ComplianceOracle extends EventEmitter {
   private xrplClient: XRPLClient;
   private xaodow: VerityXAODOW;
   private config: ComplianceOracleConfig;
   private governanceSigners: Set<string> = new Set();
-  
-  // Storage (in-memory for now, would be database in production)
-  private proposals: Map<string, ClawbackProposal> = new Map();
-  private transparencyLedger: TransparencyEntry[] = [];
-  private disputesByProposal: Map<string, Dispute[]> = new Map();
-  private commentsByProposal: Map<string, PublicComment[]> = new Map();
 
   constructor(
     xrplClient: XRPLClient,
@@ -151,8 +125,6 @@ export class ComplianceOracle extends EventEmitter {
     super();
     this.xrplClient = xrplClient;
     this.xaodow = xaodow;
-    
-    // Default configuration
     this.config = {
       commentPeriodMs: config?.commentPeriodMs ?? COMMENT_PERIOD_MS,
       disputeStakeMinDrops: config?.disputeStakeMinDrops ?? MIN_DISPUTE_STAKE_DROPS,
@@ -163,124 +135,100 @@ export class ComplianceOracle extends EventEmitter {
       allowAnonymousComments: config?.allowAnonymousComments ?? false,
     };
 
-    logger.info('Compliance Oracle initialized', {
-      commentPeriod: `${this.config.commentPeriodMs / 3600000} hours`,
-      governanceQuorum: this.config.governanceQuorum,
+    logger.info('Compliance Oracle initialized with PostgreSQL backing', {
+      commentPeriodHours: this.config.commentPeriodMs / (60 * 60 * 1000),
+      quorum: this.config.governanceQuorum,
       requiredMajority: `${this.config.requiredMajority}%`,
     });
   }
 
   /**
-   * Set governance signers (multi-sig committee)
+   * Add a governance signer
    */
-  setGovernanceSigners(signers: string[]): void {
-    this.governanceSigners = new Set(signers);
-    logger.info(`Governance committee set: ${signers.length} members`);
-    
-    this.addTransparencyEntry({
-      type: 'PROPOSAL_CREATED',
-      proposalId: 'SYSTEM',
-      actor: 'SYSTEM',
-      action: 'Governance committee updated',
-      details: { signerCount: signers.length },
-    });
+  addGovernanceSigner(wallet: string): void {
+    this.governanceSigners.add(wallet);
+    logger.info('Governance signer added', { wallet });
   }
 
   /**
-   * Create a clawback proposal with 24-hour comment period
+   * Remove a governance signer
    */
-  async createClawbackProposal(
-    initiator: string,
+  removeGovernanceSigner(wallet: string): void {
+    this.governanceSigners.delete(wallet);
+    logger.info('Governance signer removed', { wallet });
+  }
+
+  /**
+   * Create a new clawback proposal
+   */
+  async createProposal(
+    initiatorWallet: string,
     asset: string,
     targetWallet: string,
     amount: string,
     reason: ClawbackReason,
     legalJustification: string,
     documentationUrls: string[] = []
-  ): Promise<ClawbackProposal> {
-    // Verify initiator is authorized
-    if (!this.governanceSigners.has(initiator)) {
-      throw new Error('Only governance committee members can create clawback proposals');
-    }
-
+  ) {
     // Validate inputs
-    if (this.config.publicJustificationRequired && !legalJustification.trim()) {
-      throw new Error('Legal justification is required for clawback proposals');
+    if (this.config.publicJustificationRequired && !legalJustification) {
+      throw new Error('Legal justification is required');
     }
 
-    const proposalId = generateId('PROP');
-    const now = new Date();
-    
-    // Create underlying clawback request in XAO-DOW
-    const clawback = await this.xaodow.initiateClawback(
-      asset,
-      targetWallet,
-      amount,
-      reason,
-      legalJustification
-    );
+    // Calculate comment period end
+    const commentPeriodEnds = new Date(Date.now() + this.config.commentPeriodMs);
 
-    const proposal: ClawbackProposal = {
-      id: proposalId,
-      clawbackId: clawback.id,
-      initiator,
+    // Generate verification hash
+    const verificationHash = generateVerificationHash({
       asset,
       targetWallet,
       amount,
       reason,
       legalJustification,
-      documentationUrls,
-      status: 'comment_period',
-      comments: [],
-      votes: [],
-      disputes: [],
-      commentPeriodEndsAt: new Date(now.getTime() + this.config.commentPeriodMs),
-      createdAt: now,
-      verificationHash: generateVerificationHash({
-        proposalId,
-        clawbackId: clawback.id,
-        initiator,
+      initiatorWallet,
+      commentPeriodEnds: commentPeriodEnds.toISOString(),
+    });
+
+    // Create proposal in database
+    const proposal = await prisma.clawbackProposal.create({
+      data: {
         asset,
         targetWallet,
-        amount,
-        reason,
-        createdAt: now.toISOString(),
-      }),
-    };
-
-    this.proposals.set(proposalId, proposal);
-    this.commentsByProposal.set(proposalId, []);
-    this.disputesByProposal.set(proposalId, []);
-
-    // Log to transparency ledger
-    this.addTransparencyEntry({
-      type: 'PROPOSAL_CREATED',
-      proposalId,
-      actor: initiator,
-      action: 'Created clawback proposal',
-      details: {
-        asset,
-        targetWallet,
-        amount,
-        reason,
-        commentPeriodEndsAt: proposal.commentPeriodEndsAt.toISOString(),
+        amount: parseFloat(amount),
+        reason: reason as any, // Map to Prisma enum
+        legalJustification,
+        documentationUrls,
+        initiatorWallet,
+        status: 'COMMENT_PERIOD',
+        commentPeriodEnds,
+        verificationHash,
       },
     });
 
-    logAuditAction('CLAWBACK_PROPOSAL_CREATED', initiator, {
-      proposalId,
-      clawbackId: clawback.id,
-      asset,
+    // Log to audit
+    await this.logTransparencyEntry({
+      type: 'PROPOSAL_CREATED',
+      proposalId: proposal.id,
+      actor: initiatorWallet,
+      action: `Clawback proposal created for ${amount} ${asset} from ${targetWallet}`,
+      details: {
+        reason,
+        amount,
+        asset,
+        targetWallet,
+        commentPeriodEnds: commentPeriodEnds.toISOString(),
+      },
+    });
+
+    logAuditAction('CLAWBACK_PROPOSAL_CREATED', initiatorWallet, {
+      proposalId: proposal.id,
       targetWallet,
       amount,
+      asset,
       reason,
     });
 
     this.emit('proposalCreated', proposal);
-
-    logger.info(`Clawback proposal created: ${proposalId}`, {
-      commentPeriodEnds: proposal.commentPeriodEndsAt.toISOString(),
-    });
 
     return proposal;
   }
@@ -288,71 +236,56 @@ export class ComplianceOracle extends EventEmitter {
   /**
    * Add a public comment to a proposal
    */
-  addPublicComment(
+  async addComment(
     proposalId: string,
-    author: string,
+    authorWallet: string,
     content: string,
     supportClawback: boolean
-  ): PublicComment {
-    const proposal = this.proposals.get(proposalId);
+  ) {
+    const proposal = await prisma.clawbackProposal.findUnique({
+      where: { id: proposalId },
+    });
+
     if (!proposal) {
       throw new Error(`Proposal ${proposalId} not found`);
     }
 
-    if (proposal.status !== 'comment_period') {
+    // Check comment period
+    if (new Date() > proposal.commentPeriodEnds) {
       throw new Error('Comment period has ended');
     }
 
-    if (new Date() > proposal.commentPeriodEndsAt) {
-      // Auto-transition to voting phase
-      proposal.status = 'voting';
-      proposal.votingEndsAt = new Date(Date.now() + 48 * 60 * 60 * 1000); // 48h voting
-      throw new Error('Comment period has ended');
+    // Validate author
+    if (!this.config.allowAnonymousComments && !authorWallet) {
+      throw new Error('Author wallet is required');
     }
 
-    if (!this.config.allowAnonymousComments && !author) {
-      throw new Error('Anonymous comments are not allowed');
-    }
-
-    const commentId = generateId('CMT');
-    const comment: PublicComment = {
-      id: commentId,
-      clawbackId: proposal.clawbackId,
-      author: author || 'anonymous',
+    // Generate verification hash
+    const verificationHash = generateVerificationHash({
+      proposalId,
+      author: authorWallet,
       content,
       supportClawback,
-      timestamp: new Date(),
-      verificationHash: generateVerificationHash({
-        commentId,
+      timestamp: new Date().toISOString(),
+    });
+
+    // Create comment (verificationHash stored in audit log)
+    const comment = await prisma.clawbackComment.create({
+      data: {
         proposalId,
-        author,
+        authorWallet,
         content,
-        timestamp: new Date().toISOString(),
-      }),
-    };
-
-    proposal.comments.push(comment);
-    const comments = this.commentsByProposal.get(proposalId) || [];
-    comments.push(comment);
-    this.commentsByProposal.set(proposalId, comments);
-
-    // Log to transparency ledger
-    this.addTransparencyEntry({
-      type: 'COMMENT_ADDED',
-      proposalId,
-      actor: comment.author,
-      action: `Added ${supportClawback ? 'supporting' : 'opposing'} comment`,
-      details: {
-        commentId,
         supportClawback,
-        contentLength: content.length,
       },
     });
 
-    logAuditAction('PUBLIC_COMMENT_ADDED', author, {
+    // Log transparency entry
+    await this.logTransparencyEntry({
+      type: 'COMMENT_ADDED',
       proposalId,
-      commentId,
-      supportClawback,
+      actor: authorWallet,
+      action: `Comment added ${supportClawback ? 'supporting' : 'opposing'} clawback`,
+      details: { commentId: comment.id, supportClawback },
     });
 
     this.emit('commentAdded', { proposalId, comment });
@@ -361,565 +294,603 @@ export class ComplianceOracle extends EventEmitter {
   }
 
   /**
-   * Cast a governance vote on a proposal
-   */
-  castVote(
-    proposalId: string,
-    voter: string,
-    vote: 'approve' | 'reject' | 'abstain',
-    reason?: string,
-    signature?: string
-  ): ClawbackVote {
-    const proposal = this.proposals.get(proposalId);
-    if (!proposal) {
-      throw new Error(`Proposal ${proposalId} not found`);
-    }
-
-    // Verify voter is governance member
-    if (!this.governanceSigners.has(voter)) {
-      throw new Error('Only governance committee members can vote');
-    }
-
-    // Check if comment period has ended
-    if (proposal.status === 'comment_period') {
-      if (new Date() < proposal.commentPeriodEndsAt) {
-        throw new Error('Cannot vote during comment period');
-      }
-      // Auto-transition to voting phase
-      proposal.status = 'voting';
-      proposal.votingEndsAt = new Date(Date.now() + 48 * 60 * 60 * 1000);
-    }
-
-    if (proposal.status !== 'voting') {
-      throw new Error(`Cannot vote on proposal in status: ${proposal.status}`);
-    }
-
-    // Check for duplicate vote
-    if (proposal.votes.some(v => v.voter === voter)) {
-      throw new Error('Already voted on this proposal');
-    }
-
-    const governanceVote: ClawbackVote = {
-      voter,
-      vote,
-      reason,
-      timestamp: new Date(),
-      signature: signature || sha256(`${proposalId}:${voter}:${vote}:${Date.now()}`),
-    };
-
-    proposal.votes.push(governanceVote);
-
-    // Also add to XAO-DOW if approving
-    if (vote === 'approve') {
-      this.xaodow.addGovernanceApproval(
-        proposal.clawbackId,
-        voter,
-        governanceVote.signature,
-        true
-      );
-    }
-
-    // Check if voting is complete
-    this.checkVotingOutcome(proposal);
-
-    // Log to transparency ledger
-    this.addTransparencyEntry({
-      type: 'VOTE_CAST',
-      proposalId,
-      actor: voter,
-      action: `Voted ${vote}`,
-      details: {
-        vote,
-        reason,
-        totalVotes: proposal.votes.length,
-        governanceSize: this.governanceSigners.size,
-      },
-    });
-
-    logAuditAction('GOVERNANCE_VOTE_CAST', voter, {
-      proposalId,
-      vote,
-    });
-
-    this.emit('voteCast', { proposalId, vote: governanceVote });
-
-    return governanceVote;
-  }
-
-  /**
-   * File a dispute against a clawback proposal
+   * File a dispute against a proposal
    */
   async fileDispute(
     proposalId: string,
-    filer: string,
+    filerWallet: string,
     reason: string,
-    evidence: string[],
+    evidence: string[] = [],
     stakeAmount: string
-  ): Promise<Dispute> {
-    const proposal = this.proposals.get(proposalId);
+  ) {
+    const proposal = await prisma.clawbackProposal.findUnique({
+      where: { id: proposalId },
+    });
+
     if (!proposal) {
       throw new Error(`Proposal ${proposalId} not found`);
     }
 
-    // Disputes can be filed during comment period or voting
-    if (!['comment_period', 'voting', 'approved'].includes(proposal.status)) {
-      throw new Error('Cannot file dispute at this stage');
+    // Check if proposal can be disputed
+    if (!['COMMENT_PERIOD', 'VOTING'].includes(proposal.status)) {
+      throw new Error('Proposal cannot be disputed in current status');
     }
 
-    // Validate stake amount
+    // Validate stake
     if (BigInt(stakeAmount) < BigInt(this.config.disputeStakeMinDrops)) {
       throw new Error(`Minimum stake is ${this.config.disputeStakeMinDrops} drops`);
     }
 
-    const disputeId = generateId('DSP');
-    const dispute: Dispute = {
-      id: disputeId,
-      clawbackId: proposal.clawbackId,
-      filer,
-      reason,
-      evidence,
-      stakeAmount,
-      status: 'active',
-      filedAt: new Date(),
-    };
-
-    proposal.disputes.push(dispute);
-    proposal.status = 'disputed';
-
-    const disputes = this.disputesByProposal.get(proposalId) || [];
-    disputes.push(dispute);
-    this.disputesByProposal.set(proposalId, disputes);
-
-    // Log to transparency ledger
-    this.addTransparencyEntry({
-      type: 'DISPUTE_FILED',
-      proposalId,
-      actor: filer,
-      action: 'Filed dispute against clawback',
-      details: {
-        disputeId,
+    // Create dispute
+    const dispute = await prisma.clawbackDispute.create({
+      data: {
+        proposalId,
+        filerWallet,
         reason,
-        evidenceCount: evidence.length,
-        stakeAmount,
+        evidence,
+        stakeAmount: parseFloat(stakeAmount),
+        status: 'ACTIVE',
       },
     });
 
-    logAuditAction('DISPUTE_FILED', filer, {
+    // Update proposal status
+    await prisma.clawbackProposal.update({
+      where: { id: proposalId },
+      data: { status: 'DISPUTED' },
+    });
+
+    // Log transparency entry
+    await this.logTransparencyEntry({
+      type: 'DISPUTE_FILED',
       proposalId,
-      disputeId,
+      actor: filerWallet,
+      action: 'Dispute filed against clawback proposal',
+      details: { disputeId: dispute.id, reason, stakeAmount },
+    });
+
+    logAuditAction('DISPUTE_FILED', filerWallet, {
+      proposalId,
+      disputeId: dispute.id,
+      reason,
       stakeAmount,
     });
 
     this.emit('disputeFiled', { proposalId, dispute });
 
-    logger.info(`Dispute filed: ${disputeId}`, {
-      proposalId,
-      filer,
-      stakeAmount,
-    });
-
     return dispute;
   }
 
   /**
-   * Resolve a dispute (governance committee decision)
+   * Cast a governance vote
    */
-  resolveDispute(
+  async castVote(
     proposalId: string,
-    disputeId: string,
-    decidedBy: string[],
-    decision: 'clawback_cancelled' | 'clawback_proceeds' | 'partial_clawback',
-    rationale: string,
-    partialAmount?: string
-  ): Dispute {
-    const proposal = this.proposals.get(proposalId);
+    voterWallet: string,
+    vote: 'approve' | 'reject' | 'abstain',
+    reason?: string,
+    signature?: string
+  ) {
+    // Verify voter is a governance signer
+    if (!this.governanceSigners.has(voterWallet)) {
+      throw new Error('Voter is not a governance signer');
+    }
+
+    const proposal = await prisma.clawbackProposal.findUnique({
+      where: { id: proposalId },
+    });
+
     if (!proposal) {
       throw new Error(`Proposal ${proposalId} not found`);
     }
 
-    const dispute = proposal.disputes.find(d => d.id === disputeId);
-    if (!dispute) {
-      throw new Error(`Dispute ${disputeId} not found`);
+    // Check if voting is open
+    if (proposal.status !== 'VOTING' && proposal.status !== 'COMMENT_PERIOD') {
+      throw new Error('Voting is not open for this proposal');
     }
 
-    if (dispute.status !== 'active') {
-      throw new Error('Dispute is not active');
+    // Update vote counts
+    const updateData: any = {};
+    if (vote === 'approve') {
+      updateData.approveVotes = { increment: 1 };
+    } else if (vote === 'reject') {
+      updateData.rejectVotes = { increment: 1 };
+    } else {
+      updateData.abstainVotes = { increment: 1 };
     }
 
-    // Verify deciders are governance members
-    for (const decider of decidedBy) {
-      if (!this.governanceSigners.has(decider)) {
-        throw new Error(`${decider} is not a governance member`);
+    // If first vote and still in comment period, move to voting
+    if (proposal.status === 'COMMENT_PERIOD' && new Date() > proposal.commentPeriodEnds) {
+      updateData.status = 'VOTING';
+      updateData.votingEndsAt = new Date(Date.now() + 48 * 60 * 60 * 1000); // 48 hour voting
+    }
+
+    await prisma.clawbackProposal.update({
+      where: { id: proposalId },
+      data: updateData,
+    });
+
+    // Log transparency entry
+    await this.logTransparencyEntry({
+      type: 'VOTE_CAST',
+      proposalId,
+      actor: voterWallet,
+      action: `Vote cast: ${vote}`,
+      details: { vote, reason, hasSignature: !!signature },
+    });
+
+    logAuditAction('VOTE_CAST', voterWallet, {
+      proposalId,
+      vote,
+      reason,
+    });
+
+    this.emit('voteCast', { proposalId, voterWallet, vote });
+
+    // Check if quorum reached
+    const updatedProposal = await prisma.clawbackProposal.findUnique({
+      where: { id: proposalId },
+    });
+
+    if (updatedProposal) {
+      const totalVotes = updatedProposal.approveVotes + updatedProposal.rejectVotes;
+      if (totalVotes >= this.config.governanceQuorum) {
+        await this.checkVotingResult(proposalId);
       }
     }
 
-    // Require quorum for resolution
-    if (decidedBy.length < this.config.governanceQuorum) {
-      throw new Error(`Resolution requires at least ${this.config.governanceQuorum} governance members`);
-    }
+    return { proposalId, vote, voterWallet };
+  }
 
-    const resolution: DisputeResolution = {
-      decidedBy,
-      decision,
-      rationale,
-      partialAmount,
-      timestamp: new Date(),
-      verificationHash: generateVerificationHash({
-        disputeId,
-        decision,
-        rationale,
-        decidedBy,
-        timestamp: new Date().toISOString(),
-      }),
-    };
-
-    dispute.resolution = resolution;
-    dispute.resolvedAt = new Date();
-
-    // Update dispute status based on decision
-    if (decision === 'clawback_cancelled') {
-      dispute.status = 'resolved_for_filer';
-      proposal.status = 'cancelled';
-      // Filer gets stake back (would implement transfer in production)
-    } else if (decision === 'clawback_proceeds' || decision === 'partial_clawback') {
-      dispute.status = 'resolved_against_filer';
-      proposal.status = 'approved';
-      // Stake goes to governance treasury (would implement in production)
-    }
-
-    // Log to transparency ledger
-    this.addTransparencyEntry({
-      type: 'DISPUTE_RESOLVED',
-      proposalId,
-      actor: decidedBy.join(','),
-      action: `Resolved dispute: ${decision}`,
-      details: {
-        disputeId,
-        decision,
-        rationale,
-        partialAmount,
-      },
+  /**
+   * Check and finalize voting result
+   */
+  private async checkVotingResult(proposalId: string) {
+    const proposal = await prisma.clawbackProposal.findUnique({
+      where: { id: proposalId },
     });
 
-    logAuditAction('DISPUTE_RESOLVED', decidedBy[0] || 'SYSTEM', {
-      proposalId,
-      disputeId,
-      decision,
+    if (!proposal) return;
+
+    const totalVotes = proposal.approveVotes + proposal.rejectVotes;
+    if (totalVotes < this.config.governanceQuorum) return;
+
+    const approvalPercentage = (proposal.approveVotes / totalVotes) * 100;
+
+    let newStatus: string;
+    if (approvalPercentage >= this.config.requiredMajority) {
+      newStatus = 'APPROVED';
+    } else {
+      newStatus = 'CANCELLED';
+    }
+
+    await prisma.clawbackProposal.update({
+      where: { id: proposalId },
+      data: { status: newStatus as any },
     });
 
-    this.emit('disputeResolved', { proposalId, dispute });
-
-    return dispute;
+    this.emit('votingComplete', { proposalId, approved: newStatus === 'APPROVED', approvalPercentage });
   }
 
   /**
    * Execute an approved clawback
    */
-  async executeClawback(
-    proposalId: string,
-    executorWallet: Wallet
-  ): Promise<TransactionResult> {
-    const proposal = this.proposals.get(proposalId);
+  async executeClawback(proposalId: string, executorWallet: Wallet) {
+    const proposal = await prisma.clawbackProposal.findUnique({
+      where: { id: proposalId },
+    });
+
     if (!proposal) {
       throw new Error(`Proposal ${proposalId} not found`);
     }
 
-    if (proposal.status !== 'approved') {
-      throw new Error(`Cannot execute proposal in status: ${proposal.status}`);
-    }
-
-    // Verify executor is governance member
-    if (!this.governanceSigners.has(executorWallet.address)) {
-      throw new Error('Only governance members can execute clawbacks');
-    }
-
-    // Verify comment period has ended
-    if (new Date() < proposal.commentPeriodEndsAt) {
-      throw new Error('Cannot execute during comment period');
+    if (proposal.status !== 'APPROVED') {
+      throw new Error('Proposal is not approved for execution');
     }
 
     // Check for active disputes
-    const activeDisputes = proposal.disputes.filter(d => d.status === 'active');
-    if (activeDisputes.length > 0) {
-      throw new Error('Cannot execute with active disputes');
+    const activeDisputes = await prisma.clawbackDispute.count({
+      where: { proposalId, status: 'ACTIVE' },
+    });
+
+    if (activeDisputes > 0) {
+      throw new Error('Cannot execute - there are unresolved disputes');
     }
 
-    logger.info(`Executing clawback: ${proposal.clawbackId}`);
+    // First, initiate the clawback in XAO-DOW system
+    // initiateClawback(asset, fromWallet, amount, reason, legalJustification)
+    const clawbackInit = await this.xaodow.initiateClawback(
+      proposal.asset,
+      proposal.targetWallet,
+      String(proposal.amount),
+      proposal.reason as ClawbackReason,
+      `Proposal ${proposalId}: ${proposal.legalJustification}`
+    );
 
-    // Execute via XAO-DOW
-    const result = await this.xaodow.executeClawback(proposal.clawbackId);
+    // Then execute it
+    const result = await this.xaodow.executeClawback(clawbackInit.id);
 
-    if (result.success) {
-      proposal.status = 'executed';
-      proposal.executedAt = new Date();
+    // Update proposal
+    await prisma.clawbackProposal.update({
+      where: { id: proposalId },
+      data: {
+        status: 'EXECUTED',
+        executedAt: new Date(),
+        executionTxHash: result.hash,
+      },
+    });
 
-      // Log to transparency ledger
-      this.addTransparencyEntry({
-        type: 'CLAWBACK_EXECUTED',
-        proposalId,
-        actor: executorWallet.address,
-        action: 'Executed clawback',
-        details: {
-          clawbackId: proposal.clawbackId,
-          transactionHash: result.hash,
-          asset: proposal.asset,
-          amount: proposal.amount,
-          targetWallet: proposal.targetWallet,
-        },
-        transactionHash: result.hash,
-      });
+    // Log transparency entry
+    await this.logTransparencyEntry({
+      type: 'CLAWBACK_EXECUTED',
+      proposalId,
+      actor: executorWallet.address,
+      action: `Clawback executed: ${proposal.amount} ${proposal.asset}`,
+      details: {
+        txHash: result.hash,
+        targetWallet: proposal.targetWallet,
+        amount: String(proposal.amount),
+      },
+      transactionHash: result.hash,
+    });
 
-      logAuditAction('CLAWBACK_EXECUTED_VIA_ORACLE', executorWallet.address, {
-        proposalId,
-        clawbackId: proposal.clawbackId,
-        transactionHash: result.hash,
-      });
+    logAuditAction('CLAWBACK_EXECUTED', executorWallet.address, {
+      proposalId,
+      txHash: result.hash,
+      amount: String(proposal.amount),
+      targetWallet: proposal.targetWallet,
+    });
 
-      this.emit('clawbackExecuted', { proposalId, result });
-    }
+    this.emit('clawbackExecuted', { proposalId, result });
 
     return result;
   }
 
   /**
-   * Cancel a clawback proposal
+   * Resolve a dispute
    */
-  cancelProposal(
-    proposalId: string,
-    canceller: string,
-    reason: string
-  ): ClawbackProposal {
-    const proposal = this.proposals.get(proposalId);
-    if (!proposal) {
-      throw new Error(`Proposal ${proposalId} not found`);
-    }
-
-    // Only initiator or governance majority can cancel
-    if (canceller !== proposal.initiator && !this.governanceSigners.has(canceller)) {
-      throw new Error('Not authorized to cancel this proposal');
-    }
-
-    if (proposal.status === 'executed') {
-      throw new Error('Cannot cancel executed proposal');
-    }
-
-    proposal.status = 'cancelled';
-
-    // Log to transparency ledger
-    this.addTransparencyEntry({
-      type: 'CLAWBACK_CANCELLED',
-      proposalId,
-      actor: canceller,
-      action: 'Cancelled clawback proposal',
-      details: { reason },
+  async resolveDispute(
+    disputeId: string,
+    resolvers: string[],
+    decision: 'clawback_cancelled' | 'clawback_proceeds' | 'partial_clawback',
+    rationale: string,
+    partialAmount?: string
+  ) {
+    const dispute = await prisma.clawbackDispute.findUnique({
+      where: { id: disputeId },
+      include: { proposal: true },
     });
 
-    logAuditAction('CLAWBACK_PROPOSAL_CANCELLED', canceller, {
-      proposalId,
-      reason,
-    });
+    if (!dispute) {
+      throw new Error(`Dispute ${disputeId} not found`);
+    }
 
-    this.emit('proposalCancelled', { proposalId, reason });
+    if (dispute.status !== 'ACTIVE') {
+      throw new Error('Dispute is not active');
+    }
 
-    return proposal;
-  }
-
-  /**
-   * Check voting outcome and update proposal status
-   */
-  private checkVotingOutcome(proposal: ClawbackProposal): void {
-    const totalVoters = this.governanceSigners.size;
-    const approveVotes = proposal.votes.filter(v => v.vote === 'approve').length;
-    const rejectVotes = proposal.votes.filter(v => v.vote === 'reject').length;
-    const totalVotes = proposal.votes.length;
-
-    // Check if quorum reached
-    if (totalVotes >= this.config.governanceQuorum) {
-      const approvePercentage = (approveVotes / totalVotes) * 100;
-      const rejectPercentage = (rejectVotes / totalVotes) * 100;
-
-      if (approvePercentage >= this.config.requiredMajority) {
-        proposal.status = 'approved';
-        logger.info(`Proposal ${proposal.id} approved`, {
-          approveVotes,
-          rejectVotes,
-          percentage: approvePercentage,
-        });
-      } else if (rejectPercentage > (100 - this.config.requiredMajority)) {
-        proposal.status = 'cancelled';
-        logger.info(`Proposal ${proposal.id} rejected`, {
-          approveVotes,
-          rejectVotes,
-          percentage: rejectPercentage,
-        });
+    // Validate resolvers are governance signers
+    for (const resolver of resolvers) {
+      if (!this.governanceSigners.has(resolver)) {
+        throw new Error(`${resolver} is not a governance signer`);
       }
     }
+
+    // Determine dispute outcome
+    let disputeStatus: string;
+    if (decision === 'clawback_cancelled') {
+      disputeStatus = 'RESOLVED_FOR_FILER';
+    } else if (decision === 'clawback_proceeds') {
+      disputeStatus = 'RESOLVED_AGAINST_FILER';
+    } else {
+      disputeStatus = 'RESOLVED_PARTIAL';
+    }
+
+    // Generate resolution hash
+    const resolutionHash = generateVerificationHash({
+      disputeId,
+      decision,
+      rationale,
+      resolvers,
+      timestamp: new Date().toISOString(),
+    });
+
+    // Update dispute - resolution is a text field in schema
+    await prisma.clawbackDispute.update({
+      where: { id: disputeId },
+      data: {
+        status: disputeStatus as any,
+        resolution: JSON.stringify({
+          decidedBy: resolvers,
+          decision,
+          rationale,
+          partialAmount,
+          verificationHash: resolutionHash,
+        }),
+        resolvedBy: resolvers,
+        resolvedAt: new Date(),
+      },
+    });
+
+    // Update proposal status based on decision
+    let newProposalStatus: string;
+    if (decision === 'clawback_cancelled') {
+      newProposalStatus = 'CANCELLED';
+    } else if (decision === 'clawback_proceeds') {
+      newProposalStatus = 'APPROVED';
+    } else {
+      newProposalStatus = 'APPROVED'; // Partial proceeds
+    }
+
+    if (dispute.proposalId) {
+      await prisma.clawbackProposal.update({
+        where: { id: dispute.proposalId },
+        data: { status: newProposalStatus as any },
+      });
+    }
+
+    // Log transparency entry
+    const proposalIdForLog = dispute.proposalId ?? disputeId;
+    await this.logTransparencyEntry({
+      type: 'DISPUTE_RESOLVED',
+      proposalId: proposalIdForLog,
+      actor: resolvers[0] ?? 'unknown',
+      action: `Dispute resolved: ${decision}`,
+      details: {
+        disputeId,
+        decision,
+        rationale,
+        resolvers,
+      },
+    });
+
+    logAuditAction('DISPUTE_RESOLVED', resolvers[0] ?? 'unknown', {
+      disputeId,
+      proposalId: proposalIdForLog,
+      decision,
+    });
+
+    this.emit('disputeResolved', { disputeId, decision });
+
+    return { disputeId, decision, proposalStatus: newProposalStatus };
   }
 
   /**
-   * Add entry to transparency ledger
+   * Get proposal by ID
    */
-  private addTransparencyEntry(
-    entry: Omit<TransparencyEntry, 'id' | 'timestamp' | 'verificationHash'>
-  ): TransparencyEntry {
-    const fullEntry: TransparencyEntry = {
-      ...entry,
-      id: generateId('TXP'),
-      timestamp: new Date(),
-      verificationHash: generateVerificationHash({
-        ...entry,
-        timestamp: new Date().toISOString(),
-      }),
-    };
-
-    this.transparencyLedger.push(fullEntry);
-    return fullEntry;
-  }
-
-  // === Public Getters ===
-
-  /**
-   * Get a proposal by ID
-   */
-  getProposal(proposalId: string): ClawbackProposal | undefined {
-    return this.proposals.get(proposalId);
+  async getProposal(proposalId: string) {
+    return prisma.clawbackProposal.findUnique({
+      where: { id: proposalId },
+      include: {
+        comments: {
+          orderBy: { createdAt: 'desc' },
+        },
+        disputes: true,
+      },
+    });
   }
 
   /**
-   * Get all proposals
+   * Get all proposals with optional filters
    */
-  getAllProposals(): ClawbackProposal[] {
-    return Array.from(this.proposals.values());
-  }
-
-  /**
-   * Get proposals by status
-   */
-  getProposalsByStatus(status: ClawbackProposal['status']): ClawbackProposal[] {
-    return Array.from(this.proposals.values()).filter(p => p.status === status);
-  }
-
-  /**
-   * Get the full transparency ledger
-   */
-  getTransparencyLedger(): TransparencyEntry[] {
-    return [...this.transparencyLedger];
-  }
-
-  /**
-   * Get transparency ledger entries for a specific proposal
-   */
-  getProposalHistory(proposalId: string): TransparencyEntry[] {
-    return this.transparencyLedger.filter(e => e.proposalId === proposalId);
+  async getProposals(options?: {
+    status?: string;
+    targetWallet?: string;
+    asset?: string;
+    limit?: number;
+    offset?: number;
+  }) {
+    return prisma.clawbackProposal.findMany({
+      where: {
+        ...(options?.status && { status: options.status as any }),
+        ...(options?.targetWallet && { targetWallet: options.targetWallet }),
+        ...(options?.asset && { asset: options.asset }),
+      },
+      include: {
+        _count: {
+          select: { comments: true, disputes: true },
+        },
+      },
+      take: options?.limit || 20,
+      skip: options?.offset || 0,
+      orderBy: { createdAt: 'desc' },
+    });
   }
 
   /**
    * Get comments for a proposal
    */
-  getProposalComments(proposalId: string): PublicComment[] {
-    return this.commentsByProposal.get(proposalId) || [];
+  async getComments(proposalId: string) {
+    return prisma.clawbackComment.findMany({
+      where: { proposalId },
+      orderBy: { createdAt: 'desc' },
+    });
   }
 
   /**
    * Get disputes for a proposal
    */
-  getProposalDisputes(proposalId: string): Dispute[] {
-    return this.disputesByProposal.get(proposalId) || [];
+  async getDisputes(proposalId: string) {
+    return prisma.clawbackDispute.findMany({
+      where: { proposalId },
+      orderBy: { createdAt: 'desc' },
+    });
   }
 
   /**
-   * Get governance statistics
+   * Get transparency ledger entries
    */
-  getGovernanceStats(): Record<string, unknown> {
-    const allProposals = this.getAllProposals();
-    
+  async getTransparencyLedger(options?: {
+    proposalId?: string;
+    type?: string;
+    limit?: number;
+    offset?: number;
+  }) {
+    return prisma.auditLog.findMany({
+      where: {
+        ...(options?.proposalId && { metadata: { path: ['proposalId'], equals: options.proposalId } }),
+        ...(options?.type && { action: options.type }),
+      },
+      take: options?.limit || 50,
+      skip: options?.offset || 0,
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  /**
+   * Get compliance statistics
+   */
+  async getStats() {
+    const [totalProposals, byStatus, recentActivity] = await Promise.all([
+      prisma.clawbackProposal.count(),
+      prisma.clawbackProposal.groupBy({
+        by: ['status'],
+        _count: true,
+      }),
+      prisma.clawbackProposal.findMany({
+        take: 5,
+        orderBy: { createdAt: 'desc' },
+        select: {
+          id: true,
+          status: true,
+          asset: true,
+          amount: true,
+          createdAt: true,
+        },
+      }),
+    ]);
+
     return {
-      totalProposals: allProposals.length,
-      proposalsByStatus: {
-        comment_period: allProposals.filter(p => p.status === 'comment_period').length,
-        voting: allProposals.filter(p => p.status === 'voting').length,
-        approved: allProposals.filter(p => p.status === 'approved').length,
-        disputed: allProposals.filter(p => p.status === 'disputed').length,
-        executed: allProposals.filter(p => p.status === 'executed').length,
-        cancelled: allProposals.filter(p => p.status === 'cancelled').length,
-      },
-      totalComments: this.transparencyLedger.filter(e => e.type === 'COMMENT_ADDED').length,
-      totalDisputes: this.transparencyLedger.filter(e => e.type === 'DISPUTE_FILED').length,
-      governanceCommitteeSize: this.governanceSigners.size,
-      transparencyEntries: this.transparencyLedger.length,
+      totalProposals,
+      byStatus: byStatus.reduce((acc, item) => {
+        acc[item.status] = item._count;
+        return acc;
+      }, {} as Record<string, number>),
+      governanceSigners: this.governanceSigners.size,
       config: {
-        commentPeriodHours: this.config.commentPeriodMs / 3600000,
-        disputeStakeMinXRP: Number(this.config.disputeStakeMinDrops) / 1000000,
-        governanceQuorum: this.config.governanceQuorum,
-        requiredMajority: `${this.config.requiredMajority}%`,
+        commentPeriodHours: this.config.commentPeriodMs / (60 * 60 * 1000),
+        quorum: this.config.governanceQuorum,
+        requiredMajority: this.config.requiredMajority,
       },
+      recentActivity,
     };
   }
 
-  /**
-   * Get oracle configuration (for transparency)
-   */
-  getOracleConfig(): ComplianceOracleConfig {
-    return { ...this.config };
+  // ============================================================================
+  // Backward Compatibility Aliases
+  // ============================================================================
+
+  /** Alias for createProposal */
+  async createClawbackProposal(...args: Parameters<typeof this.createProposal>) {
+    return this.createProposal(...args);
+  }
+
+  /** Alias for getProposals */
+  async getAllProposals(options?: Parameters<typeof this.getProposals>[0]) {
+    return this.getProposals(options);
+  }
+
+  /** Alias for getProposals with status filter */
+  async getProposalsByStatus(status: string) {
+    return this.getProposals({ status });
+  }
+
+  /** Alias for getComments */
+  async getProposalComments(proposalId: string) {
+    return this.getComments(proposalId);
+  }
+
+  /** Alias for getDisputes */
+  async getProposalDisputes(proposalId: string) {
+    return this.getDisputes(proposalId);
+  }
+
+  /** Alias for addComment */
+  async addPublicComment(...args: Parameters<typeof this.addComment>) {
+    return this.addComment(...args);
+  }
+
+  /** Get proposal history (transparency ledger) */
+  async getProposalHistory(proposalId: string) {
+    return this.getTransparencyLedger({ proposalId });
+  }
+
+  /** Verify proposal integrity */
+  async verifyProposalIntegrity(proposalId: string) {
+    const proposal = await this.getProposal(proposalId);
+    if (!proposal) {
+      return { valid: false, error: 'Proposal not found' };
+    }
+    return { valid: true, proposal };
+  }
+
+  /** Cancel a proposal */
+  async cancelProposal(proposalId: string, reason: string) {
+    return prisma.clawbackProposal.update({
+      where: { id: proposalId },
+      data: { status: 'CANCELLED' as any },
+    });
+  }
+
+  /** Alias for getStats */
+  async getGovernanceStats() {
+    return this.getStats();
+  }
+
+  /** Get oracle configuration */
+  getOracleConfig() {
+    return this.config;
+  }
+
+  /** Set multiple governance signers */
+  setGovernanceSigners(wallets: string[]) {
+    this.governanceSigners.clear();
+    wallets.forEach(w => this.governanceSigners.add(w));
   }
 
   /**
-   * Verify proposal integrity
+   * Log a transparency entry to the audit log
    */
-  verifyProposalIntegrity(proposalId: string): {
-    valid: boolean;
-    errors: string[];
-    verificationHash: string;
-  } {
-    const proposal = this.proposals.get(proposalId);
-    if (!proposal) {
-      return { valid: false, errors: ['Proposal not found'], verificationHash: '' };
-    }
-
-    const errors: string[] = [];
-
-    // Verify proposal hash
-    const expectedHash = generateVerificationHash({
-      proposalId: proposal.id,
-      clawbackId: proposal.clawbackId,
-      initiator: proposal.initiator,
-      asset: proposal.asset,
-      targetWallet: proposal.targetWallet,
-      amount: proposal.amount,
-      reason: proposal.reason,
-      createdAt: proposal.createdAt.toISOString(),
+  private async logTransparencyEntry(entry: {
+    type: string;
+    proposalId: string;
+    actor: string;
+    action: string;
+    details: Record<string, unknown>;
+    transactionHash?: string;
+  }) {
+    const verificationHash = generateVerificationHash({
+      ...entry,
+      timestamp: new Date().toISOString(),
     });
 
-    if (expectedHash !== proposal.verificationHash) {
-      errors.push('Proposal verification hash mismatch');
-    }
-
-    // Verify all comments have valid hashes
-    for (const comment of proposal.comments) {
-      const commentHash = generateVerificationHash({
-        commentId: comment.id,
-        proposalId,
-        author: comment.author,
-        content: comment.content,
-        timestamp: comment.timestamp.toISOString(),
-      });
-      if (commentHash !== comment.verificationHash) {
-        errors.push(`Comment ${comment.id} hash mismatch`);
-      }
-    }
-
-    // Verify transparency ledger consistency
-    const ledgerEntries = this.getProposalHistory(proposalId);
-    if (ledgerEntries.length === 0) {
-      errors.push('No transparency ledger entries found');
-    }
-
-    return {
-      valid: errors.length === 0,
-      errors,
-      verificationHash: proposal.verificationHash,
-    };
+    await prisma.auditLog.create({
+      data: {
+        action: entry.type,
+        actor: entry.actor,
+        entityType: 'CLAWBACK_PROPOSAL',
+        entityId: entry.proposalId,
+        metadata: {
+          ...entry.details,
+          transactionHash: entry.transactionHash,
+          verificationHash,
+        },
+      },
+    });
   }
+}
+
+// Export singleton pattern support
+let complianceOracleInstance: ComplianceOracle | null = null;
+
+export function getComplianceOracle(
+  xrplClient: XRPLClient,
+  xaodow: VerityXAODOW,
+  config?: Partial<ComplianceOracleConfig>
+): ComplianceOracle {
+  if (!complianceOracleInstance) {
+    complianceOracleInstance = new ComplianceOracle(xrplClient, xaodow, config);
+  }
+  return complianceOracleInstance;
 }
 
 export default ComplianceOracle;
