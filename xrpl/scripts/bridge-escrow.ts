@@ -54,11 +54,27 @@ const NETWORKS = {
   devnet: 'wss://s.devnet.rippletest.net:51233',
 };
 
+/**
+ * Convert currency code to XRPL format
+ * Standard codes (3 chars) stay as-is, longer codes convert to hex
+ */
+function currencyToXRPL(code: string): string {
+  if (code.length === 3) {
+    return code;
+  }
+  // Pad to 20 bytes (40 hex chars) for non-standard currencies
+  const hex = Buffer.from(code, 'utf-8').toString('hex').toUpperCase();
+  return hex.padEnd(40, '0');
+}
+
+// VRTY in hex format (for XRPL non-standard currency)
+const VRTY_HEX = currencyToXRPL('VRTY');
+
 const DEFAULT_CONFIG: BridgeConfig = {
   network: 'testnet', // Start with testnet
   xrplServer: NETWORKS.testnet,
   vrtyIssuer: 'rBeHfq9vRjZ8Cth1sMbp2nJvExmxSxAH8f',
-  vrtyCurrencyCode: 'VRTY',
+  vrtyCurrencyCode: VRTY_HEX, // Use hex format for 4-char code
   escrowWalletPath: './xrpl/config/bridge-escrow-wallet.json',
   outputDir: './xrpl/config',
 };
@@ -321,7 +337,7 @@ async function setupBridgeEscrow(config: BridgeConfig = DEFAULT_CONFIG): Promise
     return {
       escrowAddress: wallet.address,
       vrtyTrustline: !!finalVrtyTrustline,
-      xrpBalance: dropsToXrp(accountInfo.Balance),
+      xrpBalance: dropsToXrp(accountInfo.Balance).toString(),
     };
     
   } finally {
@@ -546,12 +562,12 @@ async function main() {
   
   const config: BridgeConfig = {
     ...DEFAULT_CONFIG,
-    network: (process.env.XRPL_NETWORK as any) || DEFAULT_CONFIG.network,
-    xrplServer: process.env.XRPL_SERVER || NETWORKS[DEFAULT_CONFIG.network],
+    network: (process.env['XRPL_NETWORK'] as any) || DEFAULT_CONFIG.network,
+    xrplServer: process.env['XRPL_SERVER'] || NETWORKS[DEFAULT_CONFIG.network],
   };
   
   // Use environment variable for server if network specified
-  if (process.env.XRPL_NETWORK && !process.env.XRPL_SERVER) {
+  if (process.env['XRPL_NETWORK'] && !process.env['XRPL_SERVER']) {
     config.xrplServer = NETWORKS[config.network];
   }
   

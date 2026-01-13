@@ -64,8 +64,8 @@ function loadState(): DeploymentState {
   return {
     startedAt: new Date().toISOString(),
     network: {
-      xrpl: process.env.XRPL_NETWORK || 'testnet',
-      solana: process.env.SOLANA_NETWORK || 'devnet',
+      xrpl: process.env['XRPL_NETWORK'] || 'testnet',
+      solana: process.env['SOLANA_NETWORK'] || 'devnet',
     },
     xrpl: { deployed: false },
     solana: { deployed: false },

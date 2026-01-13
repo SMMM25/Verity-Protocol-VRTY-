@@ -1,0 +1,29 @@
+{
+  "network": "devnet",
+  "deployedAt": "2026-01-13T01:50:26.844Z",
+  "token": {
+    "name": "Wrapped Verity Protocol Token",
+    "symbol": "wVRTY",
+    "decimals": 6,
+    "mint": "7J2Mo8dqKpeSXRepNpnvDqPFMGngXioVya45AirwXGxQ",
+    "metadataUri": "https://raw.githubusercontent.com/SMMM25/Verity-Protocol-VRTY-/main/solana/metadata/wvrty-metadata.json"
+  },
+  "authorities": {
+    "mintAuthority": "7EKfEcvRQYge8fHTnr7YWA7Q5PUXrmYxmKViiX8jWZh5",
+    "freezeAuthority": "4hxapL1YWfFwtdp8D14EGMBqfidL4phBdRSU8jm61Kiq"
+  },
+  "xrplReference": {
+    "issuer": "rBeHfq9vRjZ8Cth1sMbp2nJvExmxSxAH8f",
+    "totalSupply": "1,000,000,000 VRTY",
+    "distributionWallet": "rLmLMErLKDzWXyYmcZGHqQ3SCgTVJCVjA3"
+  },
+  "notes": [
+    "wVRTY is minted when VRTY is locked on XRPL bridge",
+    "wVRTY is burned when bridging back to XRPL",
+    "Total wVRTY supply should never exceed locked VRTY on XRPL"
+  ],
+  "bridge": {
+    "treasuryAuthority": "2zQiuzcVvMbU9GTfkp1Ffy9R63knvU5RTot53wdofqHV",
+    "treasuryAccount": "An3Xm7QbpbcfVoHziZpMqusNjpPK4mxL1xNaUUJJpMJb"
+  }
+}
