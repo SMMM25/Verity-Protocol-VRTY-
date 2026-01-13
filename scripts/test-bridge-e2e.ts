@@ -72,18 +72,18 @@ function loadTestConfig(): TestConfig {
   }
   
   return {
-    xrplNetwork: (process.env.XRPL_NETWORK as any) || 'testnet',
-    xrplServer: process.env.XRPL_SERVER || XRPL_SERVERS.testnet,
-    vrtyIssuer: process.env.VRTY_ISSUER || 'rBeHfq9vRjZ8Cth1sMbp2nJvExmxSxAH8f',
+    xrplNetwork: (process.env['XRPL_NETWORK'] as any) || 'testnet',
+    xrplServer: process.env['XRPL_SERVER'] || XRPL_SERVERS.testnet,
+    vrtyIssuer: process.env['VRTY_ISSUER'] || 'rBeHfq9vRjZ8Cth1sMbp2nJvExmxSxAH8f',
     vrtyCurrencyCode: 'VRTY',
-    bridgeEscrowAddress: xrplDeployment?.escrow?.address || process.env.BRIDGE_ESCROW_ADDRESS || '',
+    bridgeEscrowAddress: xrplDeployment?.escrow?.address || process.env['BRIDGE_ESCROW_ADDRESS'] || '',
     
-    solanaNetwork: (process.env.SOLANA_NETWORK as any) || 'devnet',
-    solanaRpcUrl: process.env.SOLANA_RPC_URL || clusterApiUrl('devnet'),
-    wvrtyMint: solanaDeployment?.token?.mint || process.env.WVRTY_MINT || '',
-    bridgeTreasury: solanaDeployment?.bridge?.treasuryAccount || process.env.BRIDGE_TREASURY || '',
+    solanaNetwork: (process.env['SOLANA_NETWORK'] as any) || 'devnet',
+    solanaRpcUrl: process.env['SOLANA_RPC_URL'] || clusterApiUrl('devnet'),
+    wvrtyMint: solanaDeployment?.token?.mint || process.env['WVRTY_MINT'] || '',
+    bridgeTreasury: solanaDeployment?.bridge?.treasuryAccount || process.env['BRIDGE_TREASURY'] || '',
     
-    testAmount: process.env.TEST_AMOUNT || '100',
+    testAmount: process.env['TEST_AMOUNT'] || '100',
   };
 }
 
@@ -178,7 +178,7 @@ async function checkXRPLBalance(
     ledger_index: 'validated',
   });
   
-  const xrpBalance = dropsToXrp(accountInfo.result.account_data.Balance);
+  const xrpBalance = dropsToXrp(accountInfo.result.account_data.Balance).toString();
   
   // Get VRTY balance
   let vrtyBalance = '0';
