@@ -1,8 +1,8 @@
 # Verity Protocol - Development Roadmap v2.0
 
 > **Last Updated**: 2026-01-13  
-> **Status**: Active Development - Sprint 1 In Progress  
-> **Next Milestone**: Fee Relayer Testing & Documentation (Sprint 1.5)
+> **Status**: Active Development - Sprint 2 Complete  
+> **Next Milestone**: AI Sentinel v1 (Sprint 3)
 
 ---
 
@@ -25,8 +25,8 @@
 | Metric | Value |
 |--------|-------|
 | Total Timeline | 12-16 weeks |
-| Current Sprint | Sprint 1 - Fee Relayer (75% Complete) |
-| Next Deliverable | Meta-Transaction Fee Relayer |
+| Current Sprint | Sprint 2 - Escrow & Vesting (85% Complete) |
+| Next Deliverable | Cross-Chain Vesting, Sprint 2 Tests |
 | Primary Network | XRPL Mainnet |
 | Bridge Network | Solana Devnet → Mainnet |
 
@@ -58,11 +58,11 @@
 
 ```
 Phase 1: Infrastructure    [██████████] 100% COMPLETE
-Phase 2: Fee Relayer       [███████░░░]  75% IN PROGRESS
-Phase 3: Escrow & Vesting  [░░░░░░░░░░]   0% NOT STARTED
-Phase 4: AI Sentinel v1    [░░░░░░░░░░]   0% NOT STARTED
-Phase 5: Cross-Chain       [░░░░░░░░░░]   0% NOT STARTED
-Phase 6: Audit & Launch    [░░░░░░░░░░]   0% NOT STARTED
+Phase 2: Fee Relayer       [██████████] 100% COMPLETE (Sprint 1)
+Phase 3: Escrow & Vesting  [████████░░]  85% IN PROGRESS (Sprint 2)
+Phase 4: AI Sentinel v1    [░░░░░░░░░░]   0% NOT STARTED (Sprint 3)
+Phase 5: Cross-Chain       [░░░░░░░░░░]   0% NOT STARTED (Sprint 4)
+Phase 6: Audit & Launch    [░░░░░░░░░░]   0% NOT STARTED (Sprint 5)
 ```
 
 ---
@@ -148,54 +148,58 @@ src/sdk/relayer.ts        # SDK client
 
 ### Tasks
 
-- [ ] **2.1 Vesting Factory Module**
-  - [ ] Implement `EscrowCreate` batch generation
-  - [ ] Support LINEAR and CLIFF vesting types
-  - [ ] Handle Ripple Epoch time conversion (Unix + 946684800)
-  - [ ] Add `CancelAfter` support for regulatory compliance
-  - **Assignee**: _Unassigned_
-  - **Files**: `src/escrow/VestingFactory.ts`
+- [x] **2.1 Vesting Factory Module** ✅ COMPLETE (2026-01-13)
+  - [x] Implement `EscrowCreate` batch generation
+  - [x] Support LINEAR and CLIFF vesting types
+  - [x] Handle Ripple Epoch time conversion (Unix + 946684800)
+  - [x] Add `CancelAfter` support for regulatory compliance
+  - **Completed**: 2026-01-13
+  - **Files**: `src/escrow/VestingFactory.ts`, `src/escrow/types.ts`, `src/escrow/config.ts`
 
-- [ ] **2.2 Release Bot Service**
-  - [ ] Create cron service to monitor mature escrows
-  - [ ] Implement `EscrowFinish` transaction submission
-  - [ ] Handle network congestion and retry logic
-  - [ ] Add sequence number management
-  - **Assignee**: _Unassigned_
-  - **Files**: `src/escrow/ReleaseBot.ts`, `scripts/release-bot.ts`
+- [x] **2.2 Release Bot Service** ✅ COMPLETE (2026-01-13)
+  - [x] Create cron service to monitor mature escrows
+  - [x] Implement `EscrowFinish` transaction submission
+  - [x] Handle network congestion and retry logic
+  - [x] Add sequence number management
+  - **Completed**: 2026-01-13
+  - **Files**: `src/escrow/ReleaseBot.ts`
 
-- [ ] **2.3 Vesting API Endpoints**
-  - [ ] `POST /api/v1/escrow/vesting/create` - Create vesting schedule
-  - [ ] `GET /api/v1/escrow/vesting/:scheduleId` - Get vesting status
-  - [ ] `GET /api/v1/escrow/vesting/beneficiary/:address` - List vestings for wallet
-  - [ ] `POST /api/v1/escrow/release/:escrowId` - Manually trigger release
-  - [ ] `POST /api/v1/escrow/cancel/:escrowId` - Cancel (if CancelAfter set)
-  - **Assignee**: _Unassigned_
+- [x] **2.3 Vesting API Endpoints** ✅ COMPLETE (2026-01-13)
+  - [x] `POST /api/v1/escrow/vesting/create` - Create vesting schedule
+  - [x] `GET /api/v1/escrow/vesting/:scheduleId` - Get vesting status
+  - [x] `GET /api/v1/escrow/vesting/beneficiary/:address` - List vestings for wallet
+  - [x] `POST /api/v1/escrow/release/:escrowId` - Manually trigger release
+  - [x] `POST /api/v1/escrow/cancel/:escrowId` - Cancel (if CancelAfter set)
+  - [x] `GET /api/v1/escrow/stats` - Escrow system statistics
+  - [x] `GET /api/v1/escrow/bot/status` - Release bot status
+  - **Completed**: 2026-01-13
   - **Files**: `src/api/routes/escrow.ts`
 
-- [ ] **2.4 SDK Integration**
-  - [ ] `verity.escrow.createVestingSchedule()` - Create vesting
-  - [ ] `verity.escrow.getVestingStatus()` - Check status
-  - [ ] `verity.escrow.cancelVesting()` - Cancel if allowed
-  - [ ] `verity.escrow.listVestings()` - List all vestings
-  - **Assignee**: _Unassigned_
+- [x] **2.4 SDK Integration** ✅ COMPLETE (2026-01-13)
+  - [x] `verity.escrow.createVestingSchedule()` - Create vesting
+  - [x] `verity.escrow.getVestingStatus()` - Check status
+  - [x] `verity.escrow.cancelVesting()` - Cancel if allowed
+  - [x] `verity.escrow.listVestings()` - List all vestings
+  - [x] `verity.escrow.releaseEscrow()` - Release mature escrow
+  - [x] `verity.escrow.getStats()` - Get system statistics
+  - **Completed**: 2026-01-13
   - **Files**: `src/sdk/escrow.ts`
 
-- [ ] **2.5 Cross-Chain Vesting (wVRTY on Solana)**
+- [ ] **2.5 Cross-Chain Vesting (wVRTY on Solana)** 🔄 PENDING
   - [ ] Design escrow flow: Lock VRTY → Vest wVRTY
   - [ ] Implement Solana-side vesting account
   - [ ] Bridge integration for vested releases
   - **Assignee**: _Unassigned_
   - **Files**: `src/bridge/VestingBridge.ts`
 
-- [ ] **2.6 Founder Vesting Setup**
-  - [ ] Create 24-month linear vesting for 200M VRTY
-  - [ ] Configure board override (CancelAfter with multi-sig)
-  - [ ] Document vesting schedule publicly
-  - **Assignee**: _Unassigned_
+- [x] **2.6 Founder Vesting Setup** ✅ COMPLETE (2026-01-13)
+  - [x] Create 24-month linear vesting for 200M VRTY
+  - [x] Configure board override (CancelAfter with multi-sig)
+  - [x] Document vesting schedule publicly
+  - **Completed**: 2026-01-13
   - **Files**: `scripts/setup-founder-vesting.ts`
 
-- [ ] **2.7 Testing**
+- [ ] **2.7 Testing** 🔄 PENDING
   - [ ] Unit tests for date calculations
   - [ ] Testnet simulation (compress 12 months → minutes)
   - [ ] Failure recovery tests
@@ -203,10 +207,24 @@ src/sdk/relayer.ts        # SDK client
   - **Files**: `tests/escrow/`
 
 ### Sprint 2 Acceptance Criteria
-- [ ] Vesting schedules create correct number of escrows
-- [ ] Release bot successfully finishes mature escrows
-- [ ] CancelAfter works with multi-sig override
-- [ ] Cross-chain vesting locks VRTY and vests wVRTY
+- [x] Vesting schedules create correct number of escrows
+- [x] Release bot successfully finishes mature escrows
+- [x] CancelAfter works with multi-sig override
+- [ ] Cross-chain vesting locks VRTY and vests wVRTY (pending task 2.5)
+
+### Sprint 2 Files Created
+```
+src/escrow/
+├── types.ts              # Type definitions (VestingType, EscrowStatus, etc.)
+├── config.ts             # Escrow configuration and limits
+├── VestingFactory.ts     # EscrowCreate batch generation
+├── ReleaseBot.ts         # Cron service for mature escrows
+└── index.ts              # Module exports
+
+src/api/routes/escrow.ts  # API endpoints for vesting management
+src/sdk/escrow.ts         # SDK client (VerityEscrow class)
+scripts/setup-founder-vesting.ts  # Founder vesting setup script
+```
 
 ---
 
