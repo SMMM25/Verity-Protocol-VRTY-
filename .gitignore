@@ -47,6 +47,17 @@ secrets/
 .secrets/
 .vrty-credentials.json
 .vrty-mainnet-credentials.json
+*-credentials.json
+*.seed
+*.secret
+
+# Production/staging environment files (contain sensitive configs)
+.env.production
+.env.staging
+
+# Wallet files
+wallet*.json
+keystore/
 
 # Package manager locks (keep one, ignore others based on preference)
 # package-lock.json
