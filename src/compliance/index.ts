@@ -7,11 +7,14 @@
 
 export {
   ComplianceOracle,
+  getComplianceOracle,
   type PublicComment,
   type Dispute,
   type DisputeResolution,
-  type ClawbackProposal,
   type ClawbackVote,
   type TransparencyEntry,
   type ComplianceOracleConfig,
 } from './ComplianceOracle.js';
+
+// Re-export ClawbackProposal from Prisma types
+export type { ClawbackProposal } from '@prisma/client';
