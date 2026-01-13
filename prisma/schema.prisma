@@ -640,6 +640,196 @@ model ReputationScore {
 }
 
 // ============================================================
+// TAX ENGINE
+// ============================================================
+
+/// Cost basis method for tax calculations
+enum CostBasisMethod {
+  FIFO          /// First In, First Out
+  LIFO          /// Last In, First Out
+  HIFO          /// Highest In, First Out
+  AVERAGE       /// Average cost basis
+  SPECIFIC_ID   /// Specific lot identification
+}
+
+/// Tax transaction types
+enum TaxTransactionType {
+  BUY
+  SELL
+  TRANSFER
+  DIVIDEND
+  STAKING_REWARD
+  AIRDROP
+}
+
+/// Tax calculation types for reporting
+enum TaxCalculationType {
+  CAPITAL_GAIN
+  CAPITAL_LOSS
+  DIVIDEND_INCOME
+  INTEREST_INCOME
+  ORDINARY_INCOME
+  GIFT
+  NON_TAXABLE
+}
+
+/// User tax profile
+model TaxProfile {
+  id              String          @id @default(cuid())
+  
+  userId          String          @unique
+  taxResidence    String          /// Jurisdiction code (e.g., 'US', 'DE', 'GB')
+  taxId           String?         /// Tax identification number
+  costBasisMethod CostBasisMethod @default(FIFO)
+  treatyBenefits  String[]        /// Countries with treaty benefits
+  filingStatus    String?         /// e.g., 'SINGLE', 'MARRIED_FILING_JOINTLY'
+  
+  // Relations
+  transactions    TaxTransaction[]
+  costBasisLots   CostBasisLot[]
+  calculations    TaxCalculation[]
+  reports         TaxReport[]
+  auditEntries    TaxAuditEntry[]
+  
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@index([userId])
+  @@index([taxResidence])
+}
+
+/// Cost basis lot for FIFO/LIFO/HIFO calculations
+model CostBasisLot {
+  id              String      @id @default(cuid())
+  
+  profileId       String
+  profile         TaxProfile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  
+  asset           String      /// Asset identifier (e.g., 'VRTY', 'XRP')
+  amount          Decimal     @db.Decimal(20, 6)
+  costBasis       Decimal     @db.Decimal(20, 6) /// Total cost in fiat
+  remainingAmount Decimal     @db.Decimal(20, 6) /// Amount not yet sold
+  
+  acquiredAt      DateTime
+  txHash          String?     /// Transaction hash for acquisition
+  
+  createdAt       DateTime    @default(now())
+
+  @@index([profileId])
+  @@index([profileId, asset])
+  @@index([acquiredAt])
+}
+
+/// Tax transaction record
+model TaxTransaction {
+  id              String              @id @default(cuid())
+  
+  profileId       String
+  profile         TaxProfile          @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  
+  type            TaxTransactionType
+  asset           String
+  amount          Decimal             @db.Decimal(20, 6)
+  pricePerUnit    Decimal             @db.Decimal(20, 6)
+  totalValue      Decimal             @db.Decimal(20, 6)
+  fee             Decimal?            @db.Decimal(20, 6)
+  
+  txHash          String              /// Blockchain transaction hash
+  
+  timestamp       DateTime
+  createdAt       DateTime            @default(now())
+
+  @@index([profileId])
+  @@index([profileId, asset])
+  @@index([timestamp])
+  @@index([type])
+}
+
+/// Tax calculation result
+model TaxCalculation {
+  id              String            @id @default(cuid())
+  
+  profileId       String
+  profile         TaxProfile        @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  
+  transactionId   String            /// Reference to TaxTransaction ID
+  transactionType TaxCalculationType
+  
+  proceeds        Decimal           @db.Decimal(20, 6)
+  costBasis       Decimal           @db.Decimal(20, 6)
+  gainLoss        Decimal           @db.Decimal(20, 6)
+  taxableAmount   Decimal           @db.Decimal(20, 6)
+  
+  taxRate         Decimal           @db.Decimal(5, 2) /// Tax rate percentage
+  taxOwed         Decimal           @db.Decimal(20, 6)
+  
+  jurisdiction    String            /// Tax jurisdiction code
+  methodology     String            @db.Text /// Explanation of calculation
+  isLongTerm      Boolean           @default(false)
+  
+  verificationHash String           /// Hash for audit verification
+  
+  calculatedAt    DateTime          @default(now())
+
+  @@index([profileId])
+  @@index([jurisdiction])
+  @@index([calculatedAt])
+  @@index([transactionType])
+}
+
+/// Tax report (annual)
+model TaxReport {
+  id              String    @id @default(cuid())
+  
+  profileId       String
+  profile         TaxProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  
+  taxYear         Int
+  jurisdiction    String
+  reportFormat    String    /// 'IRS_8949', 'HMRC', 'GENERIC'
+  
+  // Aggregates
+  totalGains      Decimal   @db.Decimal(20, 6)
+  totalLosses     Decimal   @db.Decimal(20, 6)
+  netGainLoss     Decimal   @db.Decimal(20, 6)
+  totalTaxOwed    Decimal   @db.Decimal(20, 6)
+  
+  shortTermGains  Decimal   @db.Decimal(20, 6)
+  shortTermLosses Decimal   @db.Decimal(20, 6)
+  longTermGains   Decimal   @db.Decimal(20, 6)
+  longTermLosses  Decimal   @db.Decimal(20, 6)
+  
+  dividendIncome  Decimal   @db.Decimal(20, 6)
+  stakingIncome   Decimal   @db.Decimal(20, 6)
+  
+  transactionCount Int
+  
+  generatedAt     DateTime  @default(now())
+
+  @@unique([profileId, taxYear])
+  @@index([profileId])
+  @@index([taxYear])
+}
+
+/// Tax audit trail entry
+model TaxAuditEntry {
+  id              String      @id @default(cuid())
+  
+  profileId       String
+  profile         TaxProfile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  
+  entryType       String      /// 'TAX_CALCULATION', 'PROFILE_CHANGE', 'REPORT_GENERATED'
+  data            Json        /// Full calculation or change data
+  verificationHash String     /// Hash for integrity verification
+  
+  createdAt       DateTime    @default(now())
+
+  @@index([profileId])
+  @@index([entryType])
+  @@index([createdAt])
+}
+
+// ============================================================
 // AUDIT LOG
 // ============================================================
 
