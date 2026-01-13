@@ -7,9 +7,21 @@ import { Request, Response, NextFunction } from 'express';
 import { RateLimiterMemory } from 'rate-limiter-flexible';
 import { v4 as uuidv4 } from 'uuid';
 import { logger } from '../utils/logger.js';
+import { validateApiKey, getTierRateLimit, TIER_RATE_LIMITS } from '../services/apikey.service.js';
 
-// Rate limiter configuration
-const rateLimiter = new RateLimiterMemory({
+// Tier-based rate limiters
+const rateLimiters: Record<string, RateLimiterMemory> = {};
+
+// Initialize rate limiters for each tier
+for (const [tier, config] of Object.entries(TIER_RATE_LIMITS)) {
+  rateLimiters[tier] = new RateLimiterMemory({
+    points: config.points,
+    duration: config.duration,
+  });
+}
+
+// Default rate limiter for unauthenticated requests
+const defaultRateLimiter = new RateLimiterMemory({
   points: parseInt(process.env['RATE_LIMIT_MAX_REQUESTS'] || '100'),
   duration: parseInt(process.env['RATE_LIMIT_WINDOW_MS'] || '60000') / 1000,
 });
@@ -71,12 +83,13 @@ export function requestLoggerMiddleware(
 
 /**
  * API Key authentication middleware
+ * Validates API keys against the database with bcrypt
  */
-export function apiKeyAuthMiddleware(
+export async function apiKeyAuthMiddleware(
   req: Request,
   res: Response,
   next: NextFunction
-): void {
+): Promise<void> {
   const apiKey = req.get('X-API-Key') || req.query['api_key'] as string;
 
   if (!apiKey) {
@@ -95,16 +108,43 @@ export function apiKeyAuthMiddleware(
     return;
   }
 
-  // In production, validate against database
-  // For now, just set the API key on the request
-  req.apiKey = apiKey;
-  req.userId = extractUserIdFromApiKey(apiKey);
+  try {
+    // Validate API key against database
+    const validation = await validateApiKey(apiKey);
 
-  next();
+    if (!validation.valid) {
+      res.status(401).json({
+        success: false,
+        error: {
+          code: 'INVALID_API_KEY',
+          message: validation.error || 'Invalid or expired API key',
+        },
+      });
+      return;
+    }
+
+    // Set validated user info on request
+    req.apiKey = apiKey;
+    req.userId = validation.userId;
+    (req as any).userTier = validation.tier;
+    (req as any).rateLimit = validation.rateLimit;
+
+    next();
+  } catch (error: any) {
+    logger.error('API key validation error:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        code: 'AUTH_ERROR',
+        message: 'Authentication service error',
+      },
+    });
+  }
 }
 
 /**
  * Rate limiting middleware
+ * Uses tier-based rate limits from database validation
  */
 export async function rateLimitMiddleware(
   req: Request,
@@ -113,14 +153,31 @@ export async function rateLimitMiddleware(
 ): Promise<void> {
   try {
     const key = req.apiKey || req.ip || 'anonymous';
-    await rateLimiter.consume(key);
+    const userTier = (req as any).userTier || 'EXPLORER';
+    
+    // Use tier-specific rate limiter
+    const limiter = rateLimiters[userTier] || defaultRateLimiter;
+    
+    const rateLimitRes = await limiter.consume(key);
+    
+    // Set rate limit headers
+    res.setHeader('X-RateLimit-Limit', limiter.points?.toString() || '100');
+    res.setHeader('X-RateLimit-Remaining', rateLimitRes.remainingPoints.toString());
+    res.setHeader('X-RateLimit-Reset', new Date(Date.now() + rateLimitRes.msBeforeNext).toISOString());
+    
     next();
-  } catch {
+  } catch (rateLimitRes: any) {
+    const retryAfter = Math.ceil(rateLimitRes.msBeforeNext / 1000);
+    
+    res.setHeader('Retry-After', retryAfter.toString());
+    res.setHeader('X-RateLimit-Remaining', '0');
+    
     res.status(429).json({
       success: false,
       error: {
         code: 'RATE_LIMIT_EXCEEDED',
         message: 'Too many requests. Please try again later.',
+        retryAfter,
       },
     });
   }
@@ -215,6 +272,11 @@ function isPublicEndpoint(path: string): boolean {
     '/api/v1/guilds',
     '/api/v1/transparency',
     '/api/v1/assets',
+    '/api/v1/vrty/info',
+    '/api/v1/vrty/staking-tiers',
+    '/api/v1/vrty/health',
+    '/api/v1/bridge/supported-chains',
+    '/api/v1/bridge/health',
   ];
   // Allow all UI paths and static assets
   if (path.startsWith('/ui') || path.endsWith('.js') || path.endsWith('.css') || 
@@ -223,10 +285,4 @@ function isPublicEndpoint(path: string): boolean {
     return true;
   }
   return publicPaths.some((p) => path === p || path.startsWith(p + '/'));
-}
-
-function extractUserIdFromApiKey(apiKey: string): string {
-  // In production, this would look up the user from the database
-  // For now, just return a placeholder
-  return `user_${apiKey.substring(0, 8)}`;
 }
