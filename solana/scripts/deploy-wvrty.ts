@@ -123,9 +123,14 @@ async function requestAirdropIfNeeded(
   
   if (balance < minBalance) {
     console.log(`Requesting airdrop for ${publicKey.toString()}...`);
-    const signature = await connection.requestAirdrop(publicKey, 2 * LAMPORTS_PER_SOL);
-    await connection.confirmTransaction(signature, 'confirmed');
-    console.log(`Airdrop confirmed: ${signature}`);
+    try {
+      const signature = await connection.requestAirdrop(publicKey, 2 * LAMPORTS_PER_SOL);
+      await connection.confirmTransaction(signature, 'confirmed');
+      console.log(`Airdrop confirmed: ${signature}`);
+    } catch (error: any) {
+      console.log(`Airdrop failed (rate limited): ${error.message}`);
+      console.log(`Wallet may need manual funding. Current balance: ${balance / LAMPORTS_PER_SOL} SOL`);
+    }
   } else {
     console.log(`Balance sufficient: ${balance / LAMPORTS_PER_SOL} SOL`);
   }
@@ -283,9 +288,30 @@ async function setupBridgeTreasury(
   const treasuryAuthority = loadOrGenerateKeypair(treasuryAuthorityPath);
   console.log(`Treasury Authority: ${treasuryAuthority.publicKey.toString()}`);
   
-  // Request airdrop if needed
+  // Fund treasury from mint authority if needed (avoids airdrop rate limits)
   if (config.network !== 'mainnet-beta') {
-    await requestAirdropIfNeeded(connection, treasuryAuthority.publicKey);
+    const mintAuthorityBalance = await connection.getBalance(mintAuthority.publicKey);
+    const treasuryBalance = await connection.getBalance(treasuryAuthority.publicKey);
+    const minRequired = 0.1 * LAMPORTS_PER_SOL; // 0.1 SOL for token account creation
+    
+    console.log(`Mint Authority Balance: ${mintAuthorityBalance / LAMPORTS_PER_SOL} SOL`);
+    console.log(`Treasury Authority Balance: ${treasuryBalance / LAMPORTS_PER_SOL} SOL`);
+    
+    if (treasuryBalance < minRequired && mintAuthorityBalance > 0.5 * LAMPORTS_PER_SOL) {
+      console.log(`\nTransferring 0.2 SOL from Mint Authority to Treasury Authority...`);
+      const transferTx = new Transaction().add(
+        SystemProgram.transfer({
+          fromPubkey: mintAuthority.publicKey,
+          toPubkey: treasuryAuthority.publicKey,
+          lamports: 0.2 * LAMPORTS_PER_SOL,
+        })
+      );
+      const sig = await sendAndConfirmTransaction(connection, transferTx, [mintAuthority]);
+      console.log(`✅ Transfer confirmed: ${sig}`);
+    } else if (treasuryBalance < minRequired) {
+      // Fallback to airdrop
+      await requestAirdropIfNeeded(connection, treasuryAuthority.publicKey);
+    }
   }
   
   // Create associated token account for treasury
@@ -367,8 +393,8 @@ async function main() {
   
   const config: DeploymentConfig = {
     ...DEFAULT_CONFIG,
-    network: (process.env.SOLANA_NETWORK as any) || DEFAULT_CONFIG.network,
-    rpcUrl: process.env.SOLANA_RPC_URL,
+    network: (process.env['SOLANA_NETWORK'] as any) || DEFAULT_CONFIG.network,
+    rpcUrl: process.env['SOLANA_RPC_URL'],
   };
   
   try {
@@ -378,7 +404,7 @@ async function main() {
         break;
         
       case 'setup-treasury':
-        const mintAddress = args[1] || process.env.WVRTY_MINT;
+        const mintAddress = args[1] || process.env['WVRTY_MINT'];
         if (!mintAddress) {
           throw new Error('Mint address required. Usage: deploy-wvrty setup-treasury <mint-address>');
         }
@@ -386,7 +412,7 @@ async function main() {
         break;
         
       case 'transfer-authority':
-        const mint = args[1] || process.env.WVRTY_MINT;
+        const mint = args[1] || process.env['WVRTY_MINT'];
         const newAuth = args[2];
         if (!mint || !newAuth) {
           throw new Error('Usage: deploy-wvrty transfer-authority <mint-address> <new-authority>');
