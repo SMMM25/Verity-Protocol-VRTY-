@@ -1,0 +1,19 @@
+{
+  "network": "testnet",
+  "deployedAt": "2026-01-13T01:49:38.230Z",
+  "escrow": {
+    "address": "rMSx5CkHJqZA4QVwp9gbwNi2JqCqK4kMPQ",
+    "publicKey": "ED04F5C724B9B59E8940A6B1473A0D2DB750B1814BEC70437B26EB292FF9E891B2"
+  },
+  "vrty": {
+    "issuer": "rBeHfq9vRjZ8Cth1sMbp2nJvExmxSxAH8f",
+    "currencyCode": "5652545900000000000000000000000000000000",
+    "trustlineLimit": "1000000000"
+  },
+  "status": "active",
+  "notes": [
+    "This is the bridge escrow account",
+    "VRTY sent here will be locked for bridging to Solana",
+    "VRTY released from here comes from Solana → XRPL bridge"
+  ]
+}
