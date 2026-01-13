@@ -31,17 +31,22 @@ export interface NetworkConfig {
 
 export interface ClawbackConfig {
   enabled: boolean;
-  requiresGovernance: boolean;
+  requiresGovernance?: boolean;
   governanceQuorum: number;
   allowedReasons: ClawbackReason[];
+  publicJustificationRequired?: boolean;
+  cooldownPeriod?: number; // in seconds
 }
 
 export type ClawbackReason =
   | 'REGULATORY_REQUIREMENT'
+  | 'REGULATORY_COMPLIANCE'
   | 'COURT_ORDER'
   | 'FRAUD_DETECTION'
+  | 'FRAUD_PREVENTION'
   | 'SANCTIONS_COMPLIANCE'
   | 'INVESTOR_PROTECTION'
+  | 'AML_VIOLATION'
   | 'ERROR_CORRECTION';
 
 export interface ClawbackExecution {

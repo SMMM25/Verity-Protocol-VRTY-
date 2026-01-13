@@ -472,7 +472,8 @@ router.post('/proposals/:proposalId/disputes/:disputeId/resolve', async (req: Re
     const decidedBy = [decider]; // Simplified for now
 
     const oracle = getOracle();
-    const { proposalId, disputeId } = req.params;
+    const proposalId = req.params['proposalId'] || '';
+    const disputeId = req.params['disputeId'] || '';
     const { decision, rationale, partialAmount } = validation.data;
 
     const dispute = oracle.resolveDispute(
@@ -538,8 +539,8 @@ router.post('/proposals/:proposalId/execute', async (req: Request, res: Response
 router.get('/transparency', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const oracle = getOracle();
-    const limit = parseInt(req.query.limit as string) || 100;
-    const offset = parseInt(req.query.offset as string) || 0;
+    const limit = parseInt(req.query['limit'] as string) || 100;
+    const offset = parseInt(req.query['offset'] as string) || 0;
 
     const ledger = oracle.getTransparencyLedger();
     const paginatedLedger = ledger.slice(offset, offset + limit);

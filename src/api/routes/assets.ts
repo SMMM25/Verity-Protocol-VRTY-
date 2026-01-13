@@ -174,7 +174,7 @@ router.post('/issue', async (req: Request, res: Response) => {
           : [],
       },
       metadata: {
-        description: validatedData.description,
+        description: validatedData.description ?? '',
       },
     };
 
@@ -242,9 +242,7 @@ router.post('/tokenize/real-estate', async (req: Request, res: Response) => {
       address: validatedData.property.address,
       type: validatedData.property.type,
       appraisedValue: validatedData.property.appraisedValue,
-      lastAppraisalDate: new Date(validatedData.property.lastAppraisalDate),
-      legalEntityId: validatedData.property.legalEntityId,
-      coordinates: validatedData.property.coordinates,
+      appraisalDate: new Date(validatedData.property.lastAppraisalDate),
     };
 
     const verifiedAsset = await assetManager.tokenizeRealEstate(propertyDetails, {
@@ -252,7 +250,11 @@ router.post('/tokenize/real-estate', async (req: Request, res: Response) => {
       symbol: validatedData.token.symbol,
       totalTokens: validatedData.token.totalTokens,
       jurisdiction: validatedData.token.jurisdiction,
-      dividendSchedule: validatedData.token.dividendSchedule,
+      dividendSchedule: validatedData.token.dividendSchedule ? {
+        frequency: validatedData.token.dividendSchedule.frequency,
+        paymentCurrency: 'VRTY',
+        autoDistribute: true,
+      } : undefined,
     });
 
     res.status(201).json({

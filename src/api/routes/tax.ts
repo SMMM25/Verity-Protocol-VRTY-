@@ -159,7 +159,7 @@ router.post('/profile', async (req: Request, res: Response) => {
       taxResidence: validatedData.taxResidence,
       taxId: validatedData.taxId,
       costBasisMethod: validatedData.costBasisMethod,
-      treatyBenefits: validatedData.treatyBenefits,
+      treatyBenefits: validatedData.treatyBenefits || [],
     });
 
     res.status(201).json({
@@ -212,7 +212,7 @@ router.post('/profile', async (req: Request, res: Response) => {
  */
 router.get('/profile/:userId', async (req: Request, res: Response) => {
   try {
-    const { userId } = req.params;
+    const userId = req.params['userId'] || '';
     const taxEngine = getTaxEngine();
 
     const profile = taxEngine.getTaxProfile(userId);
@@ -253,7 +253,7 @@ router.get('/profile/:userId', async (req: Request, res: Response) => {
  */
 router.get('/transactions/:userId', async (req: Request, res: Response) => {
   try {
-    const { userId } = req.params;
+    const userId = req.params['userId'] || '';
     const { taxYear, asset, page = '1', limit = '50' } = req.query;
 
     const taxEngine = getTaxEngine();
@@ -315,7 +315,8 @@ router.get('/transactions/:userId', async (req: Request, res: Response) => {
  */
 router.get('/summary/:userId/:taxYear', async (req: Request, res: Response) => {
   try {
-    const { userId, taxYear } = req.params;
+    const userId = req.params['userId'] || '';
+    const taxYear = req.params['taxYear'] || '';
     const taxEngine = getTaxEngine();
 
     const profile = taxEngine.getTaxProfile(userId);
@@ -468,7 +469,7 @@ router.get('/jurisdictions', async (req: Request, res: Response) => {
  */
 router.get('/jurisdictions/:code', async (req: Request, res: Response) => {
   try {
-    const { code } = req.params;
+    const code = req.params['code'] || '';
     const taxEngine = getTaxEngine();
 
     const rules = taxEngine.getJurisdictionRules(code.toUpperCase());
@@ -529,7 +530,7 @@ router.get('/jurisdictions/:code', async (req: Request, res: Response) => {
  */
 router.get('/jurisdictions/treaty/:code', async (req: Request, res: Response) => {
   try {
-    const { code } = req.params;
+    const code = req.params['code'] || '';
     const taxEngine = getTaxEngine();
 
     const treatyJurisdictions = taxEngine.getJurisdictionsWithTreaty(code.toUpperCase());
@@ -646,7 +647,7 @@ router.get('/methodology', async (req: Request, res: Response) => {
  */
 router.get('/audit/:userId', async (req: Request, res: Response) => {
   try {
-    const { userId } = req.params;
+    const userId = req.params['userId'] || '';
     const taxEngine = getTaxEngine();
 
     const auditLedger = taxEngine.getAuditLedger(userId);
@@ -681,7 +682,8 @@ router.get('/audit/:userId', async (req: Request, res: Response) => {
  */
 router.get('/cost-basis/:userId/:asset', async (req: Request, res: Response) => {
   try {
-    const { userId, asset } = req.params;
+    const userId = req.params['userId'] || '';
+    const asset = req.params['asset'] || '';
     const taxEngine = getTaxEngine();
 
     const lots = taxEngine.getCostBasisLots(userId, asset);
