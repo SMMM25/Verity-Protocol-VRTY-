@@ -15,6 +15,8 @@ import { ethers } from 'ethers';
 import { XRPLClient, TransactionResult } from '../core/XRPLClient.js';
 import { logger, logAuditAction } from '../utils/logger.js';
 import { generateId, generateVerificationHash, encodeMemoData, sha256 } from '../utils/crypto.js';
+import { prisma } from '../db/client.js';
+import { BridgeDirection as PrismaBridgeDirection, BridgeStatus as PrismaBridgeStatus } from '@prisma/client';
 
 // Supported chains for cross-chain bridging
 export type SupportedChain = 'ETHEREUM' | 'POLYGON' | 'SOLANA' | 'BSC' | 'ARBITRUM' | 'OPTIMISM';
@@ -220,10 +222,9 @@ export class VerityCrossChainBridge extends EventEmitter {
   private chains: Record<SupportedChain, ChainConfig>;
   private evmProviders: Map<SupportedChain, ethers.JsonRpcProvider> = new Map();
   
-  // Transaction storage (production would use database)
-  private transactions: Map<string, BridgeTransaction> = new Map();
-  private pendingMints: Map<string, BridgeTransaction> = new Map();
-  private lockedAmounts: Map<string, bigint> = new Map(); // By escrow ID
+  // Transaction storage - using Prisma database
+  // Legacy in-memory maps kept for backward compatibility during transition
+  private lockedAmounts: Map<string, bigint> = new Map(); // Track locked amounts by bridge ID
 
   constructor(config: Partial<BridgeConfig> & { xrplClient: XRPLClient; bridgeWallet: Wallet }) {
     super();
@@ -335,10 +336,36 @@ export class VerityCrossChainBridge extends EventEmitter {
       throw new Error('Amount too small to cover bridge fees');
     }
 
-    // Create bridge transaction record
-    const bridgeId = generateId('BRG');
+    // Create bridge transaction record in database
+    const verificationHash = generateVerificationHash({
+      direction: 'XRPL_TO_EVM',
+      sourceAddress: userWallet.address,
+      destinationAddress,
+      amount,
+      destinationChain,
+      timestamp: new Date().toISOString(),
+    });
+
+    // Map to Prisma enum - EVM chains use XRPL_TO_SOLANA as closest match
+    // TODO: Add XRPL_TO_EVM to Prisma schema if needed
+    const prismaBridgeTx = await prisma.bridgeTransaction.create({
+      data: {
+        direction: 'XRPL_TO_SOLANA' as PrismaBridgeDirection, // Will be updated when schema supports EVM
+        sourceChain: 'XRPL',
+        destinationChain,
+        sourceAddress: userWallet.address,
+        destinationAddress,
+        amount: parseFloat(amount),
+        fee: parseFloat(fee),
+        status: 'INITIATED' as PrismaBridgeStatus,
+        verificationHash,
+        validatorSignatures: [],
+      },
+    });
+
+    // Create local transaction object for compatibility
     const bridgeTx: BridgeTransaction = {
-      id: bridgeId,
+      id: prismaBridgeTx.id,
       direction: 'XRPL_TO_EVM',
       sourceChain: 'XRPL',
       destinationChain,
@@ -348,38 +375,41 @@ export class VerityCrossChainBridge extends EventEmitter {
       fee,
       status: 'INITIATED',
       validatorSignatures: [],
-      verificationHash: generateVerificationHash({
-        bridgeId,
-        direction: 'XRPL_TO_EVM',
-        sourceAddress: userWallet.address,
-        destinationAddress,
-        amount,
-        destinationChain,
-        timestamp: new Date().toISOString(),
-      }),
-      createdAt: new Date(),
+      verificationHash,
+      createdAt: prismaBridgeTx.createdAt,
     };
 
-    this.transactions.set(bridgeId, bridgeTx);
-
     // Step 1: Lock VRTY on XRPL using escrow or payment to bridge wallet
-    const lockResult = await this.lockVRTYOnXRPL(userWallet, amount, bridgeId);
+    const lockResult = await this.lockVRTYOnXRPL(userWallet, amount, prismaBridgeTx.id);
 
     if (!lockResult.success) {
+      // Update database with failure
+      await prisma.bridgeTransaction.update({
+        where: { id: prismaBridgeTx.id },
+        data: {
+          status: 'FAILED',
+          errorMessage: lockResult.error || 'Failed to lock VRTY on XRPL',
+        },
+      });
       bridgeTx.status = 'FAILED';
       bridgeTx.errorMessage = lockResult.error || 'Failed to lock VRTY on XRPL';
       throw new Error(bridgeTx.errorMessage);
     }
 
-    bridgeTx.status = 'LOCKED';
+    // Update database with locked status
+    await prisma.bridgeTransaction.update({
+      where: { id: prismaBridgeTx.id },
+      data: {
+        status: 'VALIDATING',
+        sourceTxHash: lockResult.hash,
+      },
+    });
+
+    bridgeTx.status = 'VALIDATING';
     bridgeTx.sourceTransactionHash = lockResult.hash;
 
-    // Step 2: Request validator signatures
-    bridgeTx.status = 'VALIDATING';
-    this.pendingMints.set(bridgeId, bridgeTx);
-
     logAuditAction('BRIDGE_INITIATED', userWallet.address, {
-      bridgeId,
+      bridgeId: prismaBridgeTx.id,
       destinationChain,
       amount,
       fee,
@@ -388,7 +418,7 @@ export class VerityCrossChainBridge extends EventEmitter {
 
     this.emit('bridgeInitiated', bridgeTx);
 
-    logger.info(`Bridge transaction initiated: ${bridgeId}`, {
+    logger.info(`Bridge transaction initiated: ${prismaBridgeTx.id}`, {
       sourceHash: lockResult.hash,
       status: bridgeTx.status,
     });
@@ -442,13 +472,17 @@ export class VerityCrossChainBridge extends EventEmitter {
   /**
    * Add validator signature to a pending bridge transaction
    */
-  addValidatorSignature(
+  async addValidatorSignature(
     bridgeId: string,
     validator: string,
     signature: string
-  ): BridgeTransaction {
-    const bridgeTx = this.transactions.get(bridgeId);
-    if (!bridgeTx) {
+  ): Promise<BridgeTransaction> {
+    // Get transaction from database
+    const dbBridgeTx = await prisma.bridgeTransaction.findUnique({
+      where: { id: bridgeId },
+    });
+    
+    if (!dbBridgeTx) {
       throw new Error(`Bridge transaction ${bridgeId} not found`);
     }
 
@@ -456,29 +490,69 @@ export class VerityCrossChainBridge extends EventEmitter {
       throw new Error(`${validator} is not an authorized validator`);
     }
 
-    if (bridgeTx.validatorSignatures.some(s => s.validator === validator)) {
+    const existingSignatures = (dbBridgeTx.validatorSignatures as any[]) || [];
+    
+    if (existingSignatures.some((s: any) => s.validator === validator)) {
       throw new Error(`Validator ${validator} has already signed this transaction`);
     }
 
     // Verify signature (in production, verify cryptographic signature)
-    const expectedMessage = sha256(`${bridgeId}:${bridgeTx.verificationHash}:${validator}`);
+    const expectedMessage = sha256(`${bridgeId}:${dbBridgeTx.verificationHash}:${validator}`);
     // In production: verify signature against expectedMessage using validator's public key
 
-    bridgeTx.validatorSignatures.push({
-      validator,
-      signature,
-      timestamp: new Date(),
+    const newSignatures = [
+      ...existingSignatures,
+      {
+        validator,
+        signature,
+        timestamp: new Date().toISOString(),
+      },
+    ];
+
+    // Check if we have enough signatures
+    const thresholdReached = newSignatures.length >= this.requiredValidations;
+    const newStatus = thresholdReached ? 'MINTING' : dbBridgeTx.status;
+
+    // Update database
+    const updatedTx = await prisma.bridgeTransaction.update({
+      where: { id: bridgeId },
+      data: {
+        validatorSignatures: newSignatures,
+        status: newStatus as PrismaBridgeStatus,
+      },
     });
 
     logger.info(`Validator signature added to bridge ${bridgeId}`, {
       validator,
-      totalSignatures: bridgeTx.validatorSignatures.length,
+      totalSignatures: newSignatures.length,
       required: this.requiredValidations,
     });
 
-    // Check if we have enough signatures
-    if (bridgeTx.validatorSignatures.length >= this.requiredValidations) {
-      bridgeTx.status = 'MINTING';
+    // Convert to local format
+    const bridgeTx: BridgeTransaction = {
+      id: updatedTx.id,
+      direction: updatedTx.direction.includes('XRPL') ? 'XRPL_TO_EVM' : 'EVM_TO_XRPL',
+      sourceChain: updatedTx.sourceChain as SupportedChain | 'XRPL',
+      destinationChain: updatedTx.destinationChain as SupportedChain | 'XRPL',
+      sourceAddress: updatedTx.sourceAddress,
+      destinationAddress: updatedTx.destinationAddress,
+      amount: Number(updatedTx.amount).toString(),
+      fee: Number(updatedTx.fee).toString(),
+      status: updatedTx.status as BridgeStatus,
+      validatorSignatures: newSignatures.map((s: any) => ({
+        validator: s.validator,
+        signature: s.signature,
+        timestamp: new Date(s.timestamp),
+      })),
+      verificationHash: updatedTx.verificationHash,
+      sourceTransactionHash: updatedTx.sourceTxHash || undefined,
+      destinationTransactionHash: updatedTx.destinationTxHash || undefined,
+      createdAt: updatedTx.createdAt,
+      completedAt: updatedTx.completedAt || undefined,
+      errorMessage: updatedTx.errorMessage || undefined,
+    };
+
+    if (thresholdReached) {
       this.emit('validationComplete', bridgeTx);
     }
 
@@ -492,18 +566,44 @@ export class VerityCrossChainBridge extends EventEmitter {
     bridgeId: string,
     relayerPrivateKey: string
   ): Promise<BridgeTransaction> {
-    const bridgeTx = this.transactions.get(bridgeId);
-    if (!bridgeTx) {
+    // Get from database
+    const dbBridgeTx = await prisma.bridgeTransaction.findUnique({
+      where: { id: bridgeId },
+    });
+    
+    if (!dbBridgeTx) {
       throw new Error(`Bridge transaction ${bridgeId} not found`);
     }
 
-    if (bridgeTx.status !== 'MINTING') {
-      throw new Error(`Bridge transaction is not ready for minting. Status: ${bridgeTx.status}`);
+    if (dbBridgeTx.status !== 'MINTING') {
+      throw new Error(`Bridge transaction is not ready for minting. Status: ${dbBridgeTx.status}`);
     }
 
-    if (bridgeTx.validatorSignatures.length < this.requiredValidations) {
+    const validatorSignatures = (dbBridgeTx.validatorSignatures as any[]) || [];
+    if (validatorSignatures.length < this.requiredValidations) {
       throw new Error('Insufficient validator signatures');
     }
+    
+    // Convert to local format for processing
+    const bridgeTx: BridgeTransaction = {
+      id: dbBridgeTx.id,
+      direction: dbBridgeTx.direction.includes('XRPL') ? 'XRPL_TO_EVM' : 'EVM_TO_XRPL',
+      sourceChain: dbBridgeTx.sourceChain as SupportedChain | 'XRPL',
+      destinationChain: dbBridgeTx.destinationChain as SupportedChain | 'XRPL',
+      sourceAddress: dbBridgeTx.sourceAddress,
+      destinationAddress: dbBridgeTx.destinationAddress,
+      amount: Number(dbBridgeTx.amount).toString(),
+      fee: Number(dbBridgeTx.fee).toString(),
+      status: dbBridgeTx.status as BridgeStatus,
+      validatorSignatures: validatorSignatures.map((s: any) => ({
+        validator: s.validator,
+        signature: s.signature,
+        timestamp: new Date(s.timestamp),
+      })),
+      verificationHash: dbBridgeTx.verificationHash,
+      sourceTransactionHash: dbBridgeTx.sourceTxHash || undefined,
+      createdAt: dbBridgeTx.createdAt,
+    };
 
     const chainConfig = this.chains[bridgeTx.destinationChain as SupportedChain];
     if (!chainConfig || !chainConfig.isEVM) {
@@ -560,6 +660,16 @@ export class VerityCrossChainBridge extends EventEmitter {
       // Wait for confirmation
       const receipt = await tx.wait(chainConfig.confirmationsRequired);
 
+      // Update database with completion
+      await prisma.bridgeTransaction.update({
+        where: { id: bridgeId },
+        data: {
+          status: 'COMPLETED',
+          destinationTxHash: receipt.hash,
+          completedAt: new Date(),
+        },
+      });
+
       bridgeTx.destinationTransactionHash = receipt.hash;
       bridgeTx.status = 'COMPLETED';
       bridgeTx.completedAt = new Date();
@@ -579,6 +689,16 @@ export class VerityCrossChainBridge extends EventEmitter {
 
       return bridgeTx;
     } catch (error) {
+      // Update database with failure
+      await prisma.bridgeTransaction.update({
+        where: { id: bridgeId },
+        data: {
+          status: 'FAILED',
+          errorMessage: (error as Error).message,
+          retryCount: { increment: 1 },
+        },
+      });
+      
       bridgeTx.status = 'FAILED';
       bridgeTx.errorMessage = (error as Error).message;
       
@@ -656,37 +776,50 @@ export class VerityCrossChainBridge extends EventEmitter {
 
     const amount = ethers.formatUnits(burnedAmount, 6);
 
-    // Create bridge transaction record
-    const bridgeId = generateId('BRG');
+    // Create bridge transaction record in database
+    const verificationHash = generateVerificationHash({
+      direction: 'EVM_TO_XRPL',
+      sourceChain,
+      evmTxHash: evmTransactionHash,
+      xrplDestination: xrplDestinationAddress,
+      amount,
+      timestamp: new Date().toISOString(),
+    });
+
+    const dbBridgeTx = await prisma.bridgeTransaction.create({
+      data: {
+        direction: 'SOLANA_TO_XRPL' as PrismaBridgeDirection, // Closest match for EVM_TO_XRPL
+        sourceChain,
+        destinationChain: 'XRPL',
+        sourceAddress: receipt.from,
+        destinationAddress: xrplDestinationAddress,
+        amount: parseFloat(amount),
+        fee: 0, // Fee already deducted on EVM side
+        status: 'VALIDATING' as PrismaBridgeStatus,
+        sourceTxHash: evmTransactionHash,
+        verificationHash,
+        validatorSignatures: [],
+      },
+    });
+
     const bridgeTx: BridgeTransaction = {
-      id: bridgeId,
+      id: dbBridgeTx.id,
       direction: 'EVM_TO_XRPL',
       sourceChain,
       destinationChain: 'XRPL',
       sourceAddress: receipt.from,
       destinationAddress: xrplDestinationAddress,
       amount,
-      fee: '0', // Fee already deducted on EVM side
+      fee: '0',
       status: 'VALIDATING',
       sourceTransactionHash: evmTransactionHash,
       validatorSignatures: [],
-      verificationHash: generateVerificationHash({
-        bridgeId,
-        direction: 'EVM_TO_XRPL',
-        sourceChain,
-        evmTxHash: evmTransactionHash,
-        xrplDestination: xrplDestinationAddress,
-        amount,
-        timestamp: new Date().toISOString(),
-      }),
-      createdAt: new Date(),
+      verificationHash,
+      createdAt: dbBridgeTx.createdAt,
     };
 
-    this.transactions.set(bridgeId, bridgeTx);
-    this.pendingMints.set(bridgeId, bridgeTx);
-
     logAuditAction('BRIDGE_FROM_EVM_INITIATED', receipt.from, {
-      bridgeId,
+      bridgeId: dbBridgeTx.id,
       sourceChain,
       evmTxHash: evmTransactionHash,
       amount,
@@ -701,18 +834,27 @@ export class VerityCrossChainBridge extends EventEmitter {
    * Complete bridge from EVM by releasing VRTY on XRPL
    */
   async completeBridgeToXRPL(bridgeId: string): Promise<BridgeTransaction> {
-    const bridgeTx = this.transactions.get(bridgeId);
-    if (!bridgeTx) {
+    // Get from database
+    const dbBridgeTx = await prisma.bridgeTransaction.findUnique({
+      where: { id: bridgeId },
+    });
+    
+    if (!dbBridgeTx) {
       throw new Error(`Bridge transaction ${bridgeId} not found`);
     }
 
-    if (bridgeTx.direction !== 'EVM_TO_XRPL') {
+    const validatorSignatures = (dbBridgeTx.validatorSignatures as any[]) || [];
+    
+    // Check direction (EVM_TO_XRPL uses SOLANA_TO_XRPL as proxy in schema)
+    if (dbBridgeTx.destinationChain !== 'XRPL') {
       throw new Error('Invalid bridge direction');
     }
 
-    if (bridgeTx.validatorSignatures.length < this.requiredValidations) {
+    if (validatorSignatures.length < this.requiredValidations) {
       throw new Error('Insufficient validator signatures');
     }
+
+    const bridgeTx = this.convertDbToLocalTransaction(dbBridgeTx);
 
     logger.info(`Completing bridge to XRPL: ${bridgeId}`, {
       destination: bridgeTx.destinationAddress,
@@ -749,16 +891,33 @@ export class VerityCrossChainBridge extends EventEmitter {
     const result = await this.xrplClient.submitAndWait(paymentTx, this.bridgeWallet);
 
     if (!result.success) {
+      // Update database with failure
+      await prisma.bridgeTransaction.update({
+        where: { id: bridgeId },
+        data: {
+          status: 'FAILED',
+          errorMessage: result.error || 'Failed to release VRTY on XRPL',
+          retryCount: { increment: 1 },
+        },
+      });
       bridgeTx.status = 'FAILED';
       bridgeTx.errorMessage = result.error || 'Failed to release VRTY on XRPL';
       throw new Error(bridgeTx.errorMessage);
     }
 
+    // Update database with completion
+    await prisma.bridgeTransaction.update({
+      where: { id: bridgeId },
+      data: {
+        status: 'COMPLETED',
+        destinationTxHash: result.hash,
+        completedAt: new Date(),
+      },
+    });
+
     bridgeTx.destinationTransactionHash = result.hash;
     bridgeTx.status = 'COMPLETED';
     bridgeTx.completedAt = new Date();
-
-    this.pendingMints.delete(bridgeId);
 
     logAuditAction('BRIDGE_TO_XRPL_COMPLETED', 'BRIDGE', {
       bridgeId,
@@ -775,14 +934,20 @@ export class VerityCrossChainBridge extends EventEmitter {
    * Refund a failed bridge transaction
    */
   async refundBridge(bridgeId: string): Promise<BridgeTransaction> {
-    const bridgeTx = this.transactions.get(bridgeId);
-    if (!bridgeTx) {
+    // Get from database
+    const dbBridgeTx = await prisma.bridgeTransaction.findUnique({
+      where: { id: bridgeId },
+    });
+    
+    if (!dbBridgeTx) {
       throw new Error(`Bridge transaction ${bridgeId} not found`);
     }
 
-    if (bridgeTx.status !== 'FAILED') {
+    if (dbBridgeTx.status !== 'FAILED') {
       throw new Error('Can only refund failed transactions');
     }
+
+    const bridgeTx = this.convertDbToLocalTransaction(dbBridgeTx);
 
     if (bridgeTx.direction === 'XRPL_TO_EVM' && bridgeTx.sourceTransactionHash) {
       // Refund VRTY on XRPL
@@ -814,6 +979,12 @@ export class VerityCrossChainBridge extends EventEmitter {
       const result = await this.xrplClient.submitAndWait(paymentTx, this.bridgeWallet);
 
       if (result.success) {
+        // Update database with refund status
+        await prisma.bridgeTransaction.update({
+          where: { id: bridgeId },
+          data: { status: 'REFUNDED' },
+        });
+        
         bridgeTx.status = 'REFUNDED';
         this.lockedAmounts.delete(bridgeId);
         
@@ -833,53 +1004,136 @@ export class VerityCrossChainBridge extends EventEmitter {
   /**
    * Get bridge transaction by ID
    */
-  getBridgeTransaction(bridgeId: string): BridgeTransaction | undefined {
-    return this.transactions.get(bridgeId);
+  async getBridgeTransaction(bridgeId: string): Promise<BridgeTransaction | undefined> {
+    const dbTx = await prisma.bridgeTransaction.findUnique({
+      where: { id: bridgeId },
+    });
+    
+    if (!dbTx) return undefined;
+    
+    return this.convertDbToLocalTransaction(dbTx);
   }
 
   /**
    * Get all bridge transactions for an address
    */
-  getBridgeTransactionsByAddress(address: string): BridgeTransaction[] {
-    return Array.from(this.transactions.values()).filter(
-      tx => tx.sourceAddress === address || tx.destinationAddress === address
-    );
+  async getBridgeTransactionsByAddress(address: string): Promise<BridgeTransaction[]> {
+    const dbTransactions = await prisma.bridgeTransaction.findMany({
+      where: {
+        OR: [
+          { sourceAddress: address },
+          { destinationAddress: address },
+        ],
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    
+    return dbTransactions.map(tx => this.convertDbToLocalTransaction(tx));
   }
 
   /**
    * Get pending bridge transactions
    */
-  getPendingBridges(): BridgeTransaction[] {
-    return Array.from(this.pendingMints.values());
+  async getPendingBridges(): Promise<BridgeTransaction[]> {
+    const dbTransactions = await prisma.bridgeTransaction.findMany({
+      where: {
+        status: {
+          in: ['INITIATED', 'LOCKED', 'VALIDATING', 'MINTING'],
+        },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+    
+    return dbTransactions.map(tx => this.convertDbToLocalTransaction(tx));
   }
 
   /**
    * Get bridge statistics
    */
-  getBridgeStatistics(): Record<string, unknown> {
-    const allTx = Array.from(this.transactions.values());
-    
+  async getBridgeStatistics(): Promise<Record<string, unknown>> {
+    const [
+      totalTransactions,
+      completedTransactions,
+      pendingTransactions,
+      failedTransactions,
+      totalVolume,
+    ] = await Promise.all([
+      prisma.bridgeTransaction.count(),
+      prisma.bridgeTransaction.count({ where: { status: 'COMPLETED' } }),
+      prisma.bridgeTransaction.count({
+        where: { status: { in: ['INITIATED', 'LOCKED', 'VALIDATING', 'MINTING'] } },
+      }),
+      prisma.bridgeTransaction.count({ where: { status: 'FAILED' } }),
+      prisma.bridgeTransaction.aggregate({ _sum: { amount: true } }),
+    ]);
+
+    // Get stats by chain
     const statsByChain: Record<string, { count: number; volume: number }> = {};
     for (const chain of Object.keys(this.chains)) {
-      const chainTx = allTx.filter(
-        tx => tx.destinationChain === chain || tx.sourceChain === chain
-      );
+      const [count, volume] = await Promise.all([
+        prisma.bridgeTransaction.count({
+          where: {
+            OR: [
+              { sourceChain: chain },
+              { destinationChain: chain },
+            ],
+          },
+        }),
+        prisma.bridgeTransaction.aggregate({
+          where: {
+            OR: [
+              { sourceChain: chain },
+              { destinationChain: chain },
+            ],
+          },
+          _sum: { amount: true },
+        }),
+      ]);
       statsByChain[chain] = {
-        count: chainTx.length,
-        volume: chainTx.reduce((sum, tx) => sum + parseFloat(tx.amount), 0),
+        count,
+        volume: Number(volume._sum.amount || 0),
       };
     }
 
     return {
-      totalTransactions: allTx.length,
-      completedTransactions: allTx.filter(tx => tx.status === 'COMPLETED').length,
-      pendingTransactions: this.pendingMints.size,
-      failedTransactions: allTx.filter(tx => tx.status === 'FAILED').length,
-      totalVolume: allTx.reduce((sum, tx) => sum + parseFloat(tx.amount), 0),
+      totalTransactions,
+      completedTransactions,
+      pendingTransactions,
+      failedTransactions,
+      totalVolume: Number(totalVolume._sum.amount || 0),
       byChain: statsByChain,
       supportedChains: Object.keys(this.chains),
       validators: Array.from(this.validators),
       requiredValidations: this.requiredValidations,
+    };
+  }
+
+  /**
+   * Convert database transaction to local format
+   */
+  private convertDbToLocalTransaction(dbTx: any): BridgeTransaction {
+    const validatorSignatures = (dbTx.validatorSignatures as any[]) || [];
+    return {
+      id: dbTx.id,
+      direction: dbTx.direction.includes('XRPL') ? 'XRPL_TO_EVM' : 'EVM_TO_XRPL',
+      sourceChain: dbTx.sourceChain as SupportedChain | 'XRPL',
+      destinationChain: dbTx.destinationChain as SupportedChain | 'XRPL',
+      sourceAddress: dbTx.sourceAddress,
+      destinationAddress: dbTx.destinationAddress,
+      amount: Number(dbTx.amount).toString(),
+      fee: Number(dbTx.fee).toString(),
+      status: dbTx.status as BridgeStatus,
+      validatorSignatures: validatorSignatures.map((s: any) => ({
+        validator: s.validator,
+        signature: s.signature,
+        timestamp: new Date(s.timestamp),
+      })),
+      verificationHash: dbTx.verificationHash,
+      sourceTransactionHash: dbTx.sourceTxHash || undefined,
+      destinationTransactionHash: dbTx.destinationTxHash || undefined,
+      createdAt: dbTx.createdAt,
+      completedAt: dbTx.completedAt || undefined,
+      errorMessage: dbTx.errorMessage || undefined,
     };
   }
 
