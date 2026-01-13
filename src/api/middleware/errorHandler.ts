@@ -114,7 +114,7 @@ export function errorHandler(
     method: req.method,
     path: req.path,
     error: err.message,
-    stack: process.env.NODE_ENV === 'development' ? err.stack : undefined,
+    stack: process.env['NODE_ENV'] === 'development' ? err.stack : undefined,
   };
 
   if (err instanceof APIError && err.isOperational) {
@@ -159,7 +159,7 @@ export function errorHandler(
 
   // Handle unknown errors
   const statusCode = 500;
-  const message = process.env.NODE_ENV === 'production'
+  const message = process.env['NODE_ENV'] === 'production'
     ? 'An unexpected error occurred'
     : err.message;
 
@@ -168,7 +168,7 @@ export function errorHandler(
     error: {
       code: 'INTERNAL_ERROR',
       message,
-      ...(process.env.NODE_ENV !== 'production' && { stack: err.stack }),
+      ...(process.env['NODE_ENV'] !== 'production' && { stack: err.stack }),
     },
     meta: {
       requestId: req.requestId,

@@ -91,7 +91,7 @@ router.get('/overview', async (req: Request, res: Response) => {
         name: 'Verity Protocol',
         version: '0.1.0',
         description: 'The Verified Financial Operating System for XRP Ledger',
-        network: process.env.XRPL_NETWORK || 'testnet',
+        network: process.env['XRPL_NETWORK'] || 'testnet',
       },
       compliance: {
         xaoDownEnabled: true,

@@ -344,7 +344,7 @@ router.get('/qr/payment', (req: Request, res: Response) => {
       amount: amount || null,
       currency: currency || 'XRP',
       memo: memo || null,
-      network: process.env.XRPL_NETWORK || 'mainnet',
+      network: process.env['XRPL_NETWORK'] || 'mainnet',
     },
     expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // 24 hours
   };
