@@ -15,6 +15,8 @@ import { taxRoutes } from './tax.js';
 import { governanceRoutes } from './governance.js';
 import { transparencyRoutes } from './transparency.js';
 import { complianceRoutes } from './compliance.js';
+import { vrtyRoutes } from './vrty.js';
+import { bridgeRoutes } from './bridge.js';
 import { openAPIRoutes } from '../openapi.js';
 
 const router = Router();
@@ -31,6 +33,8 @@ router.use('/tax', taxRoutes);
 router.use('/governance', governanceRoutes);
 router.use('/transparency', transparencyRoutes);
 router.use('/compliance', complianceRoutes);
+router.use('/vrty', vrtyRoutes);
+router.use('/bridge', bridgeRoutes);
 
 // OpenAPI/Swagger documentation
 router.use('/', openAPIRoutes);
@@ -52,6 +56,8 @@ router.get('/docs', (req, res) => {
       tax: '/api/v1/tax',
       governance: '/api/v1/governance',
       compliance: '/api/v1/compliance',
+      vrty: '/api/v1/vrty',
+      bridge: '/api/v1/bridge',
       openapi: '/api/v1/openapi.json',
       swagger: '/api/v1/swagger',
     },
