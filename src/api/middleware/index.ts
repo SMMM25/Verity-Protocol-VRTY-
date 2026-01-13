@@ -11,3 +11,13 @@ export {
   Errors, 
   ErrorCodes 
 } from './errorHandler.js';
+export {
+  XummAuthService,
+  initializeXummAuth,
+  getXummAuth,
+  requireXummAuth,
+  optionalXummAuth,
+  type XummAuthConfig,
+  type AuthenticatedUser,
+  type XummPayloadResult,
+} from './xummAuth.js';
