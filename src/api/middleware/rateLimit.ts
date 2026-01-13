@@ -1,10 +1,11 @@
 /**
  * Verity Protocol - Rate Limiting Middleware
- * Implements tiered rate limiting based on API key
+ * Implements tiered rate limiting based on API key and VRTY staking tier
  */
 
 import { Request, Response, NextFunction } from 'express';
 import { RateLimiterMemory, RateLimiterRes } from 'rate-limiter-flexible';
+import { stakeRepository } from '../../db/index.js';
 import { logger } from '../../utils/logger.js';
 
 // Rate limit configurations per tier
@@ -53,20 +54,81 @@ for (const [tier, config] of Object.entries(RATE_LIMITS)) {
   });
 }
 
-// Mock function to get user tier from API key
-// In production, this would query the database/VRTY staking contract
-function getUserTier(apiKey: string | undefined): keyof typeof RATE_LIMITS {
-  if (!apiKey) return 'PUBLIC';
+// Tier cache to avoid hitting DB on every request
+const tierCache = new Map<string, { tier: keyof typeof RATE_LIMITS; expiresAt: number }>();
+const CACHE_TTL_MS = 60000; // 1 minute cache
+
+/**
+ * Get user tier from database based on wallet address or API key
+ * Uses caching to minimize database queries
+ */
+async function getUserTier(
+  wallet: string | undefined,
+  apiKey: string | undefined
+): Promise<keyof typeof RATE_LIMITS> {
+  // No wallet or API key = public tier
+  if (!wallet && !apiKey) return 'PUBLIC';
   
-  // Simple mock implementation
-  // In production, validate API key and check VRTY staking tier
-  if (apiKey.startsWith('inst_')) return 'INSTITUTIONAL';
-  if (apiKey.startsWith('pro_')) return 'PROFESSIONAL';
-  if (apiKey.startsWith('dev_')) return 'DEVELOPER';
-  if (apiKey.startsWith('basic_')) return 'BASIC';
+  const cacheKey = wallet || apiKey || '';
   
-  // Default to BASIC for any valid API key
-  return apiKey ? 'BASIC' : 'PUBLIC';
+  // Check cache first
+  const cached = tierCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.tier;
+  }
+  
+  let tier: keyof typeof RATE_LIMITS = 'PUBLIC';
+  
+  try {
+    if (wallet) {
+      // Query database for staking tier
+      const stakingTier = await stakeRepository.getUserTier(wallet);
+      
+      // Map StakingTier enum to rate limit tier
+      switch (stakingTier) {
+        case 'INSTITUTIONAL':
+          tier = 'INSTITUTIONAL';
+          break;
+        case 'PROFESSIONAL':
+          tier = 'PROFESSIONAL';
+          break;
+        case 'DEVELOPER':
+          tier = 'DEVELOPER';
+          break;
+        case 'BASIC':
+          tier = 'BASIC';
+          break;
+        default:
+          tier = 'PUBLIC';
+      }
+    } else if (apiKey) {
+      // Fallback: API key prefix check (for backwards compatibility)
+      if (apiKey.startsWith('inst_')) tier = 'INSTITUTIONAL';
+      else if (apiKey.startsWith('pro_')) tier = 'PROFESSIONAL';
+      else if (apiKey.startsWith('dev_')) tier = 'DEVELOPER';
+      else if (apiKey.startsWith('basic_')) tier = 'BASIC';
+      else tier = 'BASIC'; // Valid API key gets at least BASIC
+    }
+  } catch (error) {
+    // Database error - default to PUBLIC but don't cache
+    logger.warn('Failed to get user tier from database', { wallet, error });
+    return 'PUBLIC';
+  }
+  
+  // Cache the result
+  tierCache.set(cacheKey, {
+    tier,
+    expiresAt: Date.now() + CACHE_TTL_MS,
+  });
+  
+  return tier;
+}
+
+/**
+ * Clear tier cache for a specific wallet (call after staking changes)
+ */
+export function clearTierCache(wallet: string): void {
+  tierCache.delete(wallet);
 }
 
 /**
@@ -78,8 +140,17 @@ export async function rateLimitMiddleware(
   next: NextFunction
 ): Promise<void> {
   const apiKey = req.headers['x-api-key'] as string | undefined;
-  const tier = getUserTier(apiKey);
+  const wallet = req.headers['x-wallet-address'] as string | undefined;
+  
+  // Get tier from database (with caching)
+  const tier = await getUserTier(wallet, apiKey);
   const limiter = rateLimiters[tier];
+  
+  if (!limiter) {
+    // Fallback to PUBLIC if limiter not found
+    next();
+    return;
+  }
   
   // Use API key or IP as the rate limit key
   const key = apiKey || req.ip || 'anonymous';
