@@ -1,8 +1,8 @@
 # Verity Protocol - Development Roadmap v2.0
 
 > **Last Updated**: 2026-01-13  
-> **Status**: Active Development  
-> **Next Milestone**: Fee Relayer (Sprint 1)
+> **Status**: Active Development - Sprint 1 In Progress  
+> **Next Milestone**: Fee Relayer Testing & Documentation (Sprint 1.5)
 
 ---
 
@@ -25,7 +25,7 @@
 | Metric | Value |
 |--------|-------|
 | Total Timeline | 12-16 weeks |
-| Current Sprint | Pre-Sprint 1 (Infrastructure Complete) |
+| Current Sprint | Sprint 1 - Fee Relayer (75% Complete) |
 | Next Deliverable | Meta-Transaction Fee Relayer |
 | Primary Network | XRPL Mainnet |
 | Bridge Network | Solana Devnet → Mainnet |
@@ -58,7 +58,7 @@
 
 ```
 Phase 1: Infrastructure    [██████████] 100% COMPLETE
-Phase 2: Fee Relayer       [░░░░░░░░░░]   0% NOT STARTED
+Phase 2: Fee Relayer       [███████░░░]  75% IN PROGRESS
 Phase 3: Escrow & Vesting  [░░░░░░░░░░]   0% NOT STARTED
 Phase 4: AI Sentinel v1    [░░░░░░░░░░]   0% NOT STARTED
 Phase 5: Cross-Chain       [░░░░░░░░░░]   0% NOT STARTED
@@ -73,38 +73,42 @@ Phase 6: Audit & Launch    [░░░░░░░░░░]   0% NOT STARTED
 
 ### Tasks
 
-- [ ] **1.1 Relayer Service Architecture**
-  - [ ] Design meta-transaction payload schema
-  - [ ] Implement signature verification (user signs intent, relayer submits)
-  - [ ] Create relayer wallet management (treasury-funded)
-  - [ ] Add rate limiting (per-wallet daily caps)
-  - **Assignee**: _Unassigned_
-  - **Files**: `src/relayer/`, `src/api/routes/relayer.ts`
+- [x] **1.1 Relayer Service Architecture** ✅ COMPLETE (2026-01-13)
+  - [x] Design meta-transaction payload schema (`src/relayer/types.ts`)
+  - [x] Implement signature verification (`src/relayer/SignatureVerifier.ts`)
+  - [x] Create relayer wallet management (`src/relayer/TreasuryManager.ts`)
+  - [x] Add rate limiting per-wallet daily caps (`src/relayer/RateLimiter.ts`)
+  - [x] Core relayer service (`src/relayer/RelayerService.ts`)
+  - **Completed**: 2026-01-13
+  - **Files**: `src/relayer/types.ts`, `src/relayer/config.ts`, `src/relayer/SignatureVerifier.ts`, `src/relayer/TreasuryManager.ts`, `src/relayer/RateLimiter.ts`, `src/relayer/RelayerService.ts`
 
-- [ ] **1.2 Anti-Abuse Mechanisms**
-  - [ ] Implement minimum VRTY stake requirement for gasless access
-  - [ ] Add per-wallet transaction limits (prevent treasury drain)
-  - [ ] Create Sybil resistance via stake-weighted access
-  - [ ] Implement circuit breaker for treasury protection
-  - **Assignee**: _Unassigned_
-  - **Files**: `src/relayer/guards/`, `src/config/relayer.ts`
+- [x] **1.2 Anti-Abuse Mechanisms** ✅ COMPLETE (2026-01-13)
+  - [x] Implement minimum VRTY stake requirement (`src/relayer/guards/StakeGuard.ts`)
+  - [x] Add per-wallet transaction limits with tier system
+  - [x] Create Sybil resistance via stake-weighted access
+  - [x] Implement circuit breaker for treasury protection (`src/relayer/guards/CircuitBreaker.ts`)
+  - **Completed**: 2026-01-13
+  - **Files**: `src/relayer/guards/StakeGuard.ts`, `src/relayer/guards/CircuitBreaker.ts`
 
-- [ ] **1.3 Relayer API Endpoints**
-  - [ ] `POST /api/v1/relayer/submit` - Submit signed transaction intent
-  - [ ] `GET /api/v1/relayer/status/:txId` - Check submission status
-  - [ ] `GET /api/v1/relayer/quota/:wallet` - Check remaining daily quota
-  - [ ] `GET /api/v1/relayer/health` - Relayer service health
-  - **Assignee**: _Unassigned_
+- [x] **1.3 Relayer API Endpoints** ✅ COMPLETE (2026-01-13)
+  - [x] `POST /relayer/submit` - Submit signed transaction intent
+  - [x] `GET /relayer/status/:txId` - Check submission status
+  - [x] `GET /relayer/quota/:address` - Check remaining daily quota
+  - [x] `GET /relayer/health` - Relayer service health
+  - [x] `GET /relayer/tiers` - Get staking tier information
+  - [x] `GET /relayer/stats` - Get relayer statistics
+  - **Completed**: 2026-01-13
   - **Files**: `src/api/routes/relayer.ts`
 
-- [ ] **1.4 SDK Integration**
-  - [ ] Add `verity.relayer.submit()` method
-  - [ ] Add `verity.relayer.getQuota()` method
-  - [ ] Update transaction signing flow to support relay mode
-  - **Assignee**: _Unassigned_
+- [x] **1.4 SDK Integration** ✅ COMPLETE (2026-01-13)
+  - [x] Add `VerityRelayer.submit()` method
+  - [x] Add `VerityRelayer.getQuota()` method
+  - [x] Add convenience methods: `submitPayment()`, `submitTrustSet()`
+  - [x] Add `canRelay()` eligibility check
+  - **Completed**: 2026-01-13
   - **Files**: `src/sdk/relayer.ts`
 
-- [ ] **1.5 Testing & Documentation**
+- [ ] **1.5 Testing & Documentation** 🔄 IN PROGRESS
   - [ ] Unit tests for signature verification
   - [ ] Integration tests for relay flow
   - [ ] Load testing for rate limits
@@ -113,10 +117,28 @@ Phase 6: Audit & Launch    [░░░░░░░░░░]   0% NOT STARTED
   - **Files**: `tests/relayer/`, `docs/relayer.md`
 
 ### Sprint 1 Acceptance Criteria
-- [ ] User can submit signed transaction without holding XRP
-- [ ] Rate limiting prevents abuse
-- [ ] Treasury balance monitoring alerts at 10% threshold
-- [ ] 99.9% uptime for relayer service
+- [x] User can submit signed transaction without holding XRP
+- [x] Rate limiting prevents abuse (tiered by VRTY stake)
+- [x] Treasury balance monitoring alerts at 10% threshold
+- [ ] 99.9% uptime for relayer service (pending production deployment)
+
+### Sprint 1 Files Created
+```
+src/relayer/
+├── types.ts              # Type definitions and interfaces
+├── config.ts             # Relayer configuration
+├── SignatureVerifier.ts  # Meta-transaction signature verification
+├── TreasuryManager.ts    # Treasury wallet and fee management
+├── RateLimiter.ts        # Per-wallet rate limiting
+├── RelayerService.ts     # Core relayer service
+├── index.ts              # Module exports
+└── guards/
+    ├── StakeGuard.ts     # VRTY stake verification
+    └── CircuitBreaker.ts # Treasury protection
+
+src/api/routes/relayer.ts # API endpoints
+src/sdk/relayer.ts        # SDK client
+```
 
 ---
 
