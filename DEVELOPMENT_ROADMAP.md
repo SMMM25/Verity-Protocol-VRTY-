@@ -1,7 +1,7 @@
 # Verity Protocol - Development Roadmap v2.0
 
 > **Last Updated**: 2026-01-13  
-> **Status**: Active Development - Sprint 2 Complete  
+> **Status**: Active Development - Audit Fixes Complete  
 > **Next Milestone**: AI Sentinel v1 (Sprint 3)
 
 ---
@@ -25,8 +25,8 @@
 | Metric | Value |
 |--------|-------|
 | Total Timeline | 12-16 weeks |
-| Current Sprint | Sprint 2 - Escrow & Vesting (85% Complete) |
-| Next Deliverable | Cross-Chain Vesting, Sprint 2 Tests |
+| Current Sprint | Sprint 2 - Escrow & Vesting (90% Complete) |
+| Next Deliverable | Deploy wVRTY to Solana Mainnet, Sprint 3 |
 | Primary Network | XRPL Mainnet |
 | Bridge Network | Solana Devnet → Mainnet |
 
@@ -59,7 +59,7 @@
 ```
 Phase 1: Infrastructure    [██████████] 100% COMPLETE
 Phase 2: Fee Relayer       [██████████] 100% COMPLETE (Sprint 1)
-Phase 3: Escrow & Vesting  [████████░░]  85% IN PROGRESS (Sprint 2)
+Phase 3: Escrow & Vesting  [█████████░]  90% IN PROGRESS (Sprint 2)
 Phase 4: AI Sentinel v1    [░░░░░░░░░░]   0% NOT STARTED (Sprint 3)
 Phase 5: Cross-Chain       [░░░░░░░░░░]   0% NOT STARTED (Sprint 4)
 Phase 6: Audit & Launch    [░░░░░░░░░░]   0% NOT STARTED (Sprint 5)
@@ -378,6 +378,20 @@ scripts/setup-founder-vesting.ts  # Founder vesting setup script
 | #20 | Security credential cleanup | ✅ Merged |
 | #21 | TypeScript type fixes | ✅ Merged |
 | #22 | Bridge DB migration | ✅ Merged |
+| #23 | Security credential cleanup | ✅ Merged |
+| #24 | Fee Relayer implementation | ✅ Merged |
+| #25 | XRPL Escrow & Vesting | ✅ Merged |
+| #26 | Audit Fixes - PostgreSQL Migration | ✅ Merged |
+
+### Audit Findings Resolved (PR #26) ✅
+
+| Finding | Status | Resolution |
+|---------|--------|------------|
+| Credential Security | ✅ Fixed | .vrty-credentials.json removed, seeds rotated |
+| Middleware Integration | ✅ Fixed | API key validation wired to apikey.service.ts |
+| GuildTreasury In-Memory | ✅ Fixed | Migrated to PostgreSQL via Prisma |
+| ComplianceOracle In-Memory | ✅ Fixed | Migrated to PostgreSQL via Prisma |
+| wVRTY Mainnet Deployment | 🔄 Pending | Deploy wVRTY SPL token to Solana Mainnet |
 
 ### Infrastructure Components ✅
 
