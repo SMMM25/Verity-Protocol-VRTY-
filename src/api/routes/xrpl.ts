@@ -137,7 +137,7 @@ router.get('/info', async (req: Request, res: Response) => {
  *                       type: string
  */
 router.get('/account/:address', async (req: Request, res: Response) => {
-  const { address } = req.params;
+  const address = req.params['address'] || '';
 
   // Validate address format
   if (!/^r[1-9A-HJ-NP-Za-km-z]{24,34}$/.test(address)) {
@@ -203,7 +203,7 @@ router.get('/account/:address', async (req: Request, res: Response) => {
  *         description: Invalid transaction hash format
  */
 router.get('/transactions/:hash', async (req: Request, res: Response) => {
-  const { hash } = req.params;
+  const hash = req.params['hash'] || '';
 
   // Validate hash format (64 hex characters)
   if (!/^[A-Fa-f0-9]{64}$/.test(hash)) {

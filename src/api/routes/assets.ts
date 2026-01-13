@@ -308,7 +308,7 @@ router.post('/tokenize/real-estate', async (req: Request, res: Response) => {
  */
 router.get('/:assetId', async (req: Request, res: Response) => {
   try {
-    const { assetId } = req.params;
+    const assetId = req.params['assetId'] || '';
 
     if (!areServicesInitialized()) {
       return res.status(404).json({
@@ -388,7 +388,7 @@ router.get('/:assetId', async (req: Request, res: Response) => {
  */
 router.get('/:assetId/verification', async (req: Request, res: Response) => {
   try {
-    const { assetId } = req.params;
+    const assetId = req.params['assetId'] || '';
 
     if (!areServicesInitialized()) {
       return res.status(404).json({
@@ -440,7 +440,7 @@ router.get('/:assetId/verification', async (req: Request, res: Response) => {
  */
 router.post('/:assetId/whitelist', async (req: Request, res: Response) => {
   try {
-    const { assetId } = req.params;
+    const assetId = req.params['assetId'] || '';
     const { wallet, kycVerified, accredited } = req.body;
 
     if (!wallet) {
@@ -500,7 +500,7 @@ router.post('/:assetId/whitelist', async (req: Request, res: Response) => {
  */
 router.post('/:assetId/distribute', async (req: Request, res: Response) => {
   try {
-    const { assetId } = req.params;
+    const assetId = req.params['assetId'] || '';
     const { toWallet, amount, purchasePrice, purchaseCurrency } = req.body;
 
     if (!toWallet || !amount) {
@@ -567,7 +567,7 @@ router.post('/:assetId/distribute', async (req: Request, res: Response) => {
  */
 router.post('/:assetId/dividends', async (req: Request, res: Response) => {
   try {
-    const { assetId } = req.params;
+    const assetId = req.params['assetId'] || '';
     const { totalAmount, currency } = req.body;
 
     if (!totalAmount || !currency) {
@@ -627,7 +627,7 @@ router.post('/:assetId/dividends', async (req: Request, res: Response) => {
  */
 router.post('/:assetId/dex/list', async (req: Request, res: Response) => {
   try {
-    const { assetId } = req.params;
+    const assetId = req.params['assetId'] || '';
     const { basePrice, baseCurrency, quantity } = req.body;
 
     if (!basePrice || !baseCurrency || !quantity) {
