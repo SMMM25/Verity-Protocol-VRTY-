@@ -87,7 +87,7 @@ function getOracle(): ComplianceOracle {
 router.get('/proposals', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const oracle = getOracle();
-    const status = req.query.status as string | undefined;
+    const status = req.query['status'] as string | undefined;
     
     let proposals;
     if (status) {
@@ -172,7 +172,7 @@ router.post('/proposals', async (req: Request, res: Response, next: NextFunction
 router.get('/proposals/:proposalId', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const oracle = getOracle();
-    const { proposalId } = req.params;
+    const proposalId = req.params['proposalId'] || '';
 
     const proposal = oracle.getProposal(proposalId);
     if (!proposal) {
@@ -215,9 +215,9 @@ router.get('/proposals/:proposalId', async (req: Request, res: Response, next: N
 router.delete('/proposals/:proposalId', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const oracle = getOracle();
-    const { proposalId } = req.params;
+    const proposalId = req.params['proposalId'] || '';
     const canceller = req.headers['x-wallet-address'] as string;
-    const reason = req.query.reason as string || 'No reason provided';
+    const reason = (req.query['reason'] as string) || 'No reason provided';
 
     if (!canceller) {
       return res.status(401).json({
@@ -253,7 +253,7 @@ router.delete('/proposals/:proposalId', async (req: Request, res: Response, next
 router.get('/proposals/:proposalId/comments', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const oracle = getOracle();
-    const { proposalId } = req.params;
+    const proposalId = req.params['proposalId'] || '';
 
     const comments = oracle.getProposalComments(proposalId);
     
@@ -299,7 +299,7 @@ router.post('/proposals/:proposalId/comments', async (req: Request, res: Respons
     }
 
     const oracle = getOracle();
-    const { proposalId } = req.params;
+    const proposalId = req.params['proposalId'] || '';
     const author = req.headers['x-wallet-address'] as string || 'anonymous';
     const { content, supportClawback } = validation.data;
 
@@ -348,7 +348,7 @@ router.post('/proposals/:proposalId/votes', async (req: Request, res: Response, 
     }
 
     const oracle = getOracle();
-    const { proposalId } = req.params;
+    const proposalId = req.params['proposalId'] || '';
     const { vote, reason, signature } = validation.data;
 
     const voteResult = oracle.castVote(proposalId, voter, vote, reason, signature);
@@ -377,7 +377,7 @@ router.post('/proposals/:proposalId/votes', async (req: Request, res: Response, 
 router.get('/proposals/:proposalId/disputes', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const oracle = getOracle();
-    const { proposalId } = req.params;
+    const proposalId = req.params['proposalId'] || '';
 
     const disputes = oracle.getProposalDisputes(proposalId);
 
@@ -424,7 +424,7 @@ router.post('/proposals/:proposalId/disputes', async (req: Request, res: Respons
     }
 
     const oracle = getOracle();
-    const { proposalId } = req.params;
+    const proposalId = req.params['proposalId'] || '';
     const { reason, evidence, stakeAmount } = validation.data;
 
     const dispute = await oracle.fileDispute(proposalId, filer, reason, evidence, stakeAmount);
@@ -569,7 +569,7 @@ router.get('/transparency', async (req: Request, res: Response, next: NextFuncti
 router.get('/transparency/:proposalId', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const oracle = getOracle();
-    const { proposalId } = req.params;
+    const proposalId = req.params['proposalId'] || '';
 
     const history = oracle.getProposalHistory(proposalId);
 
