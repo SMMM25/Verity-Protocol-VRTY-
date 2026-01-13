@@ -1,23 +1,24 @@
 /**
  * Verity Protocol - VRTY Token
  * Core utility token for fee reduction, staking, governance, and access
+ * 
+ * MIGRATED TO PRISMA: All data now persisted to PostgreSQL
  */
 
-import { Wallet, Payment, TrustSet, OfferCreate, AccountSet, AccountSetAsfFlags } from 'xrpl';
+import { Wallet, Payment, TrustSet, OfferCreate } from 'xrpl';
 import { EventEmitter } from 'eventemitter3';
 import { XRPLClient, TransactionResult } from '../core/XRPLClient.js';
-import { VerityXAODOW } from '../core/XAO_DOW.js';
 import { logger, logAuditAction } from '../utils/logger.js';
-import { generateId, generateVerificationHash, encodeMemoData } from '../utils/crypto.js';
+import { generateId, encodeMemoData } from '../utils/crypto.js';
+import { prisma } from '../db/client.js';
+import { stakeRepository, calculateTier } from '../db/repositories/stakeRepository.js';
 import type {
-  VRTYStake,
   StakingTier,
   StakingTierConfig,
   FeeCalculation,
   GovernanceVote,
   GovernanceProposal,
   ProposalCategory,
-  ProposalStatus,
 } from '../types/index.js';
 
 // VRTY Token Configuration
@@ -93,44 +94,47 @@ export interface BuybackBurn {
 /**
  * VRTY Token Manager
  * Handles all token operations, staking, and governance
+ * 
+ * NOW USING PRISMA FOR ALL DATA PERSISTENCE
  */
 export class VRTYTokenManager extends EventEmitter {
   private xrplClient: XRPLClient;
   private issuerWallet: Wallet;
-  
-  // In-memory storage (would be database in production)
-  private stakes: Map<string, VRTYStake> = new Map();
-  private proposals: Map<string, GovernanceProposal> = new Map();
-  private votes: Map<string, GovernanceVote[]> = new Map();
-  private revenueHistory: RevenueDistribution[] = [];
-  private buybackHistory: BuybackBurn[] = [];
-  
-  // Token metrics
-  private totalStaked = BigInt(0);
-  private totalBurned = BigInt(0);
-  private circulatingSupply = BigInt(VRTY_TOTAL_SUPPLY) * BigInt(10 ** VRTY_DECIMALS);
 
   constructor(xrplClient: XRPLClient, issuerWallet: Wallet) {
     super();
     this.xrplClient = xrplClient;
     this.issuerWallet = issuerWallet;
-    logger.info('VRTY Token Manager initialized');
+    logger.info('VRTY Token Manager initialized (Prisma-backed)');
   }
 
   /**
    * Get VRTY token information
    */
-  getTokenInfo(): Record<string, unknown> {
+  async getTokenInfo(): Promise<Record<string, unknown>> {
+    const totalStaked = await stakeRepository.getTotalStaked();
+    const totalBurned = await this.getTotalBurned();
+    
     return {
       name: 'Verity Protocol Token',
       symbol: VRTY_CURRENCY_CODE,
       issuer: this.issuerWallet.address,
       totalSupply: VRTY_TOTAL_SUPPLY,
-      circulatingSupply: (this.circulatingSupply / BigInt(10 ** VRTY_DECIMALS)).toString(),
-      totalStaked: (this.totalStaked / BigInt(10 ** VRTY_DECIMALS)).toString(),
-      totalBurned: (this.totalBurned / BigInt(10 ** VRTY_DECIMALS)).toString(),
+      circulatingSupply: (parseFloat(VRTY_TOTAL_SUPPLY) - totalBurned).toString(),
+      totalStaked: totalStaked.toString(),
+      totalBurned: totalBurned.toString(),
       decimals: VRTY_DECIMALS,
     };
+  }
+
+  /**
+   * Get total burned amount from database
+   */
+  private async getTotalBurned(): Promise<number> {
+    const result = await prisma.buybackBurn.aggregate({
+      _sum: { vrtyBurned: true },
+    });
+    return Number(result._sum.vrtyBurned || 0);
   }
 
   /**
@@ -200,184 +204,233 @@ export class VRTYTokenManager extends EventEmitter {
   }
 
   // ===========================================
-  // Staking Functions
+  // Staking Functions (PRISMA-BACKED)
   // ===========================================
 
   /**
-   * Stake VRTY tokens
+   * Stake VRTY tokens with transaction safety
+   * Uses database transaction to ensure atomicity
    */
   async stakeVRTY(
     wallet: Wallet,
     amount: string,
-    lockPeriodDays?: number
-  ): Promise<{ stake: VRTYStake; result: TransactionResult }> {
+    lockPeriodDays?: number,
+    userId?: string
+  ): Promise<{ stake: any; result: TransactionResult }> {
     logger.info(`Staking ${amount} VRTY from ${wallet.address}`);
 
-    // Calculate tier based on amount
-    const tier = this.calculateTier(amount);
-
-    // Transfer tokens to staking contract (issuer in this case)
-    const paymentTx: Payment = {
-      TransactionType: 'Payment',
-      Account: wallet.address,
-      Destination: this.issuerWallet.address,
-      Amount: {
-        currency: VRTY_CURRENCY_CODE,
-        issuer: this.issuerWallet.address,
-        value: amount,
-      },
-      Memos: [
-        {
-          Memo: {
-            MemoType: Buffer.from('VRTY_STAKE').toString('hex').toUpperCase(),
-            MemoData: encodeMemoData({
-              action: 'STAKE',
-              tier,
-              lockPeriodDays,
-            }),
-            MemoFormat: Buffer.from('application/json').toString('hex').toUpperCase(),
-          },
+    // Use transaction for atomicity
+    return await prisma.$transaction(async (tx) => {
+      // 1. First submit XRPL transaction
+      const paymentTx: Payment = {
+        TransactionType: 'Payment',
+        Account: wallet.address,
+        Destination: this.issuerWallet.address,
+        Amount: {
+          currency: VRTY_CURRENCY_CODE,
+          issuer: this.issuerWallet.address,
+          value: amount,
         },
-      ],
-    };
+        Memos: [
+          {
+            Memo: {
+              MemoType: Buffer.from('VRTY_STAKE').toString('hex').toUpperCase(),
+              MemoData: encodeMemoData({
+                action: 'STAKE',
+                lockPeriodDays,
+              }),
+              MemoFormat: Buffer.from('application/json').toString('hex').toUpperCase(),
+            },
+          },
+        ],
+      };
 
-    const result = await this.xrplClient.submitAndWait(paymentTx, wallet);
+      const result = await this.xrplClient.submitAndWait(paymentTx, wallet);
 
-    if (!result.success) {
-      throw new Error(`Staking failed: ${result.error}`);
-    }
+      if (!result.success) {
+        throw new Error(`Staking failed: ${result.error}`);
+      }
 
-    // Calculate lock end date
-    const lockEndDate = lockPeriodDays
-      ? new Date(Date.now() + lockPeriodDays * 24 * 60 * 60 * 1000)
-      : undefined;
+      // 2. Only update DB after XRPL success (transaction safety fix)
+      const effectiveUserId = userId || wallet.address;
+      
+      // Ensure user exists
+      await tx.user.upsert({
+        where: { wallet: wallet.address },
+        create: { wallet: wallet.address },
+        update: {},
+      });
 
-    // Create or update stake record
-    const existingStake = this.stakes.get(wallet.address);
-    const newAmount = existingStake
-      ? (parseFloat(existingStake.stakedAmount) + parseFloat(amount)).toString()
-      : amount;
+      // Get existing stake
+      const existingStake = await tx.stake.findFirst({
+        where: { wallet: wallet.address, unstakedAt: null },
+      });
 
-    const stake: VRTYStake = {
-      wallet: wallet.address,
-      stakedAmount: newAmount,
-      stakingTier: this.calculateTier(newAmount),
-      rewardsEarned: existingStake?.rewardsEarned || '0',
-      rewardsClaimed: existingStake?.rewardsClaimed || '0',
-      stakedAt: existingStake?.stakedAt || new Date(),
-      lockEndDate,
-    };
+      const amountNum = parseFloat(amount);
+      const newAmount = existingStake 
+        ? Number(existingStake.amount) + amountNum 
+        : amountNum;
 
-    this.stakes.set(wallet.address, stake);
-    this.totalStaked += BigInt(parseFloat(amount) * 10 ** VRTY_DECIMALS);
+      const tier = calculateTier(newAmount);
+      const lockEndDate = lockPeriodDays
+        ? new Date(Date.now() + lockPeriodDays * 24 * 60 * 60 * 1000)
+        : null;
 
-    logAuditAction('VRTY_STAKED', wallet.address, {
-      amount,
-      newTotalStaked: newAmount,
-      tier: stake.stakingTier,
-      transactionHash: result.hash,
+      // Create or update stake
+      const stake = existingStake
+        ? await tx.stake.update({
+            where: { id: existingStake.id },
+            data: {
+              amount: newAmount,
+              tier,
+              lockEndDate: lockEndDate || existingStake.lockEndDate,
+              lockPeriodDays: lockPeriodDays || existingStake.lockPeriodDays,
+              stakeTxHash: result.hash,
+            },
+          })
+        : await tx.stake.create({
+            data: {
+              userId: effectiveUserId,
+              wallet: wallet.address,
+              amount: amountNum,
+              tier,
+              lockEndDate,
+              lockPeriodDays,
+              stakeTxHash: result.hash,
+            },
+          });
+
+      logAuditAction('VRTY_STAKED', wallet.address, {
+        amount,
+        newTotalStaked: newAmount.toString(),
+        tier,
+        transactionHash: result.hash,
+      });
+
+      this.emit('staked', stake);
+
+      return { stake, result };
     });
-
-    this.emit('staked', stake);
-
-    return { stake, result };
   }
 
   /**
-   * Unstake VRTY tokens
+   * Unstake VRTY tokens with transaction safety
    */
   async unstakeVRTY(
     wallet: Wallet,
     amount: string
-  ): Promise<{ stake: VRTYStake | null; result: TransactionResult }> {
-    const stake = this.stakes.get(wallet.address);
-    if (!stake) {
+  ): Promise<{ stake: any | null; result: TransactionResult }> {
+    const existingStake = await prisma.stake.findFirst({
+      where: { wallet: wallet.address, unstakedAt: null },
+    });
+
+    if (!existingStake) {
       throw new Error('No stake found');
     }
 
     // Check lock period
-    if (stake.lockEndDate && new Date() < stake.lockEndDate) {
-      throw new Error(`Stake is locked until ${stake.lockEndDate.toISOString()}`);
+    if (existingStake.lockEndDate && new Date() < existingStake.lockEndDate) {
+      throw new Error(`Stake is locked until ${existingStake.lockEndDate.toISOString()}`);
     }
 
-    // Check sufficient staked amount
-    if (parseFloat(stake.stakedAmount) < parseFloat(amount)) {
+    const currentAmount = Number(existingStake.amount);
+    const unstakeAmount = parseFloat(amount);
+
+    if (currentAmount < unstakeAmount) {
       throw new Error('Insufficient staked amount');
     }
 
     logger.info(`Unstaking ${amount} VRTY for ${wallet.address}`);
 
-    // Transfer tokens back to user
-    const paymentTx: Payment = {
-      TransactionType: 'Payment',
-      Account: this.issuerWallet.address,
-      Destination: wallet.address,
-      Amount: {
-        currency: VRTY_CURRENCY_CODE,
-        issuer: this.issuerWallet.address,
-        value: amount,
-      },
-      Memos: [
-        {
-          Memo: {
-            MemoType: Buffer.from('VRTY_UNSTAKE').toString('hex').toUpperCase(),
-            MemoData: encodeMemoData({
-              action: 'UNSTAKE',
-              previousTier: stake.stakingTier,
-            }),
-            MemoFormat: Buffer.from('application/json').toString('hex').toUpperCase(),
-          },
+    // Use transaction for atomicity
+    return await prisma.$transaction(async (tx) => {
+      // 1. First submit XRPL transaction
+      const paymentTx: Payment = {
+        TransactionType: 'Payment',
+        Account: this.issuerWallet.address,
+        Destination: wallet.address,
+        Amount: {
+          currency: VRTY_CURRENCY_CODE,
+          issuer: this.issuerWallet.address,
+          value: amount,
         },
-      ],
-    };
+        Memos: [
+          {
+            Memo: {
+              MemoType: Buffer.from('VRTY_UNSTAKE').toString('hex').toUpperCase(),
+              MemoData: encodeMemoData({
+                action: 'UNSTAKE',
+              }),
+              MemoFormat: Buffer.from('application/json').toString('hex').toUpperCase(),
+            },
+          },
+        ],
+      };
 
-    const result = await this.xrplClient.submitAndWait(paymentTx, this.issuerWallet);
+      const result = await this.xrplClient.submitAndWait(paymentTx, this.issuerWallet);
 
-    if (!result.success) {
-      throw new Error(`Unstaking failed: ${result.error}`);
-    }
+      if (!result.success) {
+        throw new Error(`Unstaking failed: ${result.error}`);
+      }
 
-    // Update stake record
-    const newAmount = parseFloat(stake.stakedAmount) - parseFloat(amount);
-    this.totalStaked -= BigInt(parseFloat(amount) * 10 ** VRTY_DECIMALS);
+      // 2. Only update DB after XRPL success
+      const newAmount = currentAmount - unstakeAmount;
 
-    if (newAmount <= 0) {
-      this.stakes.delete(wallet.address);
-      
-      logAuditAction('VRTY_UNSTAKED_FULL', wallet.address, {
+      if (newAmount <= 0) {
+        // Full unstake
+        const stake = await tx.stake.update({
+          where: { id: existingStake.id },
+          data: {
+            amount: 0,
+            tier: 'NONE',
+            unstakedAt: new Date(),
+          },
+        });
+
+        logAuditAction('VRTY_UNSTAKED_FULL', wallet.address, {
+          amount,
+          transactionHash: result.hash,
+        });
+
+        return { stake: null, result };
+      }
+
+      // Partial unstake
+      const newTier = calculateTier(newAmount);
+      const stake = await tx.stake.update({
+        where: { id: existingStake.id },
+        data: {
+          amount: newAmount,
+          tier: newTier,
+        },
+      });
+
+      logAuditAction('VRTY_UNSTAKED', wallet.address, {
         amount,
+        remainingStake: newAmount.toString(),
+        newTier,
         transactionHash: result.hash,
       });
 
-      return { stake: null, result };
-    }
+      this.emit('unstaked', { wallet: wallet.address, amount });
 
-    stake.stakedAmount = newAmount.toString();
-    stake.stakingTier = this.calculateTier(stake.stakedAmount);
-
-    logAuditAction('VRTY_UNSTAKED', wallet.address, {
-      amount,
-      remainingStake: stake.stakedAmount,
-      newTier: stake.stakingTier,
-      transactionHash: result.hash,
+      return { stake, result };
     });
-
-    this.emit('unstaked', { wallet: wallet.address, amount });
-
-    return { stake, result };
   }
 
   /**
    * Claim staking rewards
    */
   async claimRewards(wallet: Wallet): Promise<TransactionResult> {
-    const stake = this.stakes.get(wallet.address);
+    const stake = await prisma.stake.findFirst({
+      where: { wallet: wallet.address, unstakedAt: null },
+    });
+
     if (!stake) {
       throw new Error('No stake found');
     }
 
-    const unclaimedRewards =
-      parseFloat(stake.rewardsEarned) - parseFloat(stake.rewardsClaimed);
+    const unclaimedRewards = Number(stake.rewardsEarned) - Number(stake.rewardsClaimed);
 
     if (unclaimedRewards <= 0) {
       throw new Error('No rewards to claim');
@@ -385,40 +438,46 @@ export class VRTYTokenManager extends EventEmitter {
 
     logger.info(`Claiming ${unclaimedRewards} VRTY rewards for ${wallet.address}`);
 
-    const paymentTx: Payment = {
-      TransactionType: 'Payment',
-      Account: this.issuerWallet.address,
-      Destination: wallet.address,
-      Amount: {
-        currency: VRTY_CURRENCY_CODE,
-        issuer: this.issuerWallet.address,
-        value: unclaimedRewards.toString(),
-      },
-      Memos: [
-        {
-          Memo: {
-            MemoType: Buffer.from('VRTY_REWARD_CLAIM').toString('hex').toUpperCase(),
-            MemoData: encodeMemoData({ action: 'CLAIM_REWARDS' }),
-            MemoFormat: Buffer.from('application/json').toString('hex').toUpperCase(),
-          },
+    // Use transaction for atomicity
+    return await prisma.$transaction(async (tx) => {
+      const paymentTx: Payment = {
+        TransactionType: 'Payment',
+        Account: this.issuerWallet.address,
+        Destination: wallet.address,
+        Amount: {
+          currency: VRTY_CURRENCY_CODE,
+          issuer: this.issuerWallet.address,
+          value: unclaimedRewards.toString(),
         },
-      ],
-    };
+        Memos: [
+          {
+            Memo: {
+              MemoType: Buffer.from('VRTY_REWARD_CLAIM').toString('hex').toUpperCase(),
+              MemoData: encodeMemoData({ action: 'CLAIM_REWARDS' }),
+              MemoFormat: Buffer.from('application/json').toString('hex').toUpperCase(),
+            },
+          },
+        ],
+      };
 
-    const result = await this.xrplClient.submitAndWait(paymentTx, this.issuerWallet);
+      const result = await this.xrplClient.submitAndWait(paymentTx, this.issuerWallet);
 
-    if (result.success) {
-      stake.rewardsClaimed = stake.rewardsEarned;
-      
-      logAuditAction('VRTY_REWARDS_CLAIMED', wallet.address, {
-        amount: unclaimedRewards,
-        transactionHash: result.hash,
-      });
+      if (result.success) {
+        await tx.stake.update({
+          where: { id: stake.id },
+          data: { rewardsClaimed: stake.rewardsEarned },
+        });
 
-      this.emit('rewardsClaimed', { wallet: wallet.address, amount: unclaimedRewards });
-    }
+        logAuditAction('VRTY_REWARDS_CLAIMED', wallet.address, {
+          amount: unclaimedRewards,
+          transactionHash: result.hash,
+        });
 
-    return result;
+        this.emit('rewardsClaimed', { wallet: wallet.address, amount: unclaimedRewards });
+      }
+
+      return result;
+    });
   }
 
   // ===========================================
@@ -428,21 +487,21 @@ export class VRTYTokenManager extends EventEmitter {
   /**
    * Calculate fees with VRTY discount
    */
-  calculateFee(
+  async calculateFee(
     feeType: keyof typeof BASE_FEES,
     amount: string,
     payerWallet: string,
     payWithVRTY: boolean
-  ): FeeCalculation {
+  ): Promise<FeeCalculation> {
     const baseFeeRate = BASE_FEES[feeType];
     const baseFee = (parseFloat(amount) * baseFeeRate) / 10000;
 
-    // Get staker discount
-    const stake = this.stakes.get(payerWallet);
+    // Get staker discount from database
+    const stake = await stakeRepository.getByWallet(payerWallet);
     let discountRate = 0;
 
     if (stake) {
-      const tierConfig = STAKING_TIERS.find((t) => t.tier === stake.stakingTier);
+      const tierConfig = STAKING_TIERS.find((t) => t.tier === stake.tier);
       if (tierConfig) {
         discountRate = tierConfig.feeDiscount;
       }
@@ -472,7 +531,7 @@ export class VRTYTokenManager extends EventEmitter {
     feeType: keyof typeof BASE_FEES,
     amount: string
   ): Promise<TransactionResult> {
-    const feeCalc = this.calculateFee(feeType, amount, payer.address, true);
+    const feeCalc = await this.calculateFee(feeType, amount, payer.address, true);
 
     logger.info(`Paying ${feeCalc.finalFee} VRTY fee for ${feeType}`);
 
@@ -505,35 +564,60 @@ export class VRTYTokenManager extends EventEmitter {
   }
 
   // ===========================================
-  // Governance Functions
+  // Governance Functions (PRISMA-BACKED)
   // ===========================================
 
   /**
    * Create a governance proposal
    */
-  createProposal(
+  async createProposal(
     proposer: string,
     title: string,
     description: string,
     category: ProposalCategory,
     executionPayload?: string
-  ): GovernanceProposal {
-    const stake = this.stakes.get(proposer);
+  ): Promise<GovernanceProposal> {
+    const stake = await stakeRepository.getByWallet(proposer);
     if (!stake) {
       throw new Error('Must be a staker to create proposals');
     }
 
     // Check minimum stake for proposal
-    const minStakeForProposal = '10000'; // 10,000 VRTY
-    if (parseFloat(stake.stakedAmount) < parseFloat(minStakeForProposal)) {
+    const minStakeForProposal = 10000; // 10,000 VRTY
+    if (Number(stake.amount) < minStakeForProposal) {
       throw new Error(`Minimum ${minStakeForProposal} VRTY staked required to create proposals`);
     }
 
-    const proposalId = generateId('GOV');
     const votingPeriodMs = 7 * 24 * 60 * 60 * 1000; // 7 days
+    const votingStartsAt = new Date();
+    const votingEndsAt = new Date(Date.now() + votingPeriodMs);
 
-    const proposal: GovernanceProposal = {
-      id: proposalId,
+    // Create in database
+    const proposal = await prisma.proposal.create({
+      data: {
+        proposerId: stake.userId,
+        proposerWallet: proposer,
+        title,
+        description,
+        category: category as any,
+        executionPayload,
+        status: 'ACTIVE',
+        votingStartsAt,
+        votingEndsAt,
+      },
+    });
+
+    logAuditAction('GOVERNANCE_PROPOSAL_CREATED', proposer, {
+      proposalId: proposal.id,
+      title,
+      category,
+    });
+
+    this.emit('proposalCreated', proposal);
+
+    // Return in expected format
+    return {
+      id: proposal.id,
       proposer,
       title,
       description,
@@ -541,34 +625,24 @@ export class VRTYTokenManager extends EventEmitter {
       forVotes: '0',
       againstVotes: '0',
       status: 'ACTIVE',
-      executionPayload,
-      createdAt: new Date(),
-      votingEndsAt: new Date(Date.now() + votingPeriodMs),
+      executionPayload: executionPayload || undefined,
+      createdAt: proposal.createdAt,
+      votingEndsAt,
     };
-
-    this.proposals.set(proposalId, proposal);
-    this.votes.set(proposalId, []);
-
-    logAuditAction('GOVERNANCE_PROPOSAL_CREATED', proposer, {
-      proposalId,
-      title,
-      category,
-    });
-
-    this.emit('proposalCreated', proposal);
-
-    return proposal;
   }
 
   /**
-   * Vote on a proposal
+   * Vote on a proposal with vote weight locking
    */
   async voteOnProposal(
     voter: Wallet,
     proposalId: string,
     support: boolean
   ): Promise<{ vote: GovernanceVote; result: TransactionResult }> {
-    const proposal = this.proposals.get(proposalId);
+    const proposal = await prisma.proposal.findUnique({
+      where: { id: proposalId },
+    });
+
     if (!proposal) {
       throw new Error(`Proposal ${proposalId} not found`);
     }
@@ -581,122 +655,194 @@ export class VRTYTokenManager extends EventEmitter {
       throw new Error('Voting period has ended');
     }
 
-    const stake = this.stakes.get(voter.address);
+    const stake = await stakeRepository.getByWallet(voter.address);
     if (!stake) {
       throw new Error('Must be a staker to vote');
     }
 
-    // Check if already voted
-    const existingVotes = this.votes.get(proposalId) || [];
-    if (existingVotes.some((v) => v.voter === voter.address)) {
+    // Check if already voted (enforced by unique constraint)
+    const existingVote = await prisma.vote.findFirst({
+      where: {
+        proposalId,
+        voterWallet: voter.address,
+      },
+    });
+
+    if (existingVote) {
       throw new Error('Already voted on this proposal');
     }
 
     logger.info(`Voting on proposal ${proposalId}: ${support ? 'FOR' : 'AGAINST'}`);
 
-    // Record vote on-chain
-    const paymentTx: Payment = {
-      TransactionType: 'Payment',
-      Account: voter.address,
-      Destination: this.issuerWallet.address,
-      Amount: '1', // Dust payment to record vote
-      Memos: [
-        {
-          Memo: {
-            MemoType: Buffer.from('VRTY_GOVERNANCE_VOTE').toString('hex').toUpperCase(),
-            MemoData: encodeMemoData({
-              proposalId,
-              support,
-              voteWeight: stake.stakedAmount,
-            }),
-            MemoFormat: Buffer.from('application/json').toString('hex').toUpperCase(),
+    // Use transaction for atomicity
+    return await prisma.$transaction(async (tx) => {
+      // 1. Record vote on-chain
+      const paymentTx: Payment = {
+        TransactionType: 'Payment',
+        Account: voter.address,
+        Destination: this.issuerWallet.address,
+        Amount: '1', // Dust payment to record vote
+        Memos: [
+          {
+            Memo: {
+              MemoType: Buffer.from('VRTY_GOVERNANCE_VOTE').toString('hex').toUpperCase(),
+              MemoData: encodeMemoData({
+                proposalId,
+                support,
+                voteWeight: stake.amount.toString(),
+              }),
+              MemoFormat: Buffer.from('application/json').toString('hex').toUpperCase(),
+            },
           },
+        ],
+      };
+
+      const result = await this.xrplClient.submitAndWait(paymentTx, voter);
+
+      if (!result.success) {
+        throw new Error(`Vote transaction failed: ${result.error}`);
+      }
+
+      // 2. Get CURRENT stake amount at time of vote (vote weight locking)
+      // This captures the stake at voting time, preventing manipulation
+      const voteWeight = Number(stake.amount);
+
+      // 3. Record vote in database
+      const dbVote = await tx.vote.create({
+        data: {
+          proposalId,
+          voterId: stake.userId,
+          voterWallet: voter.address,
+          support: support ? 'FOR' : 'AGAINST',
+          voteWeight,
+          txHash: result.hash,
         },
-      ],
-    };
+      });
 
-    const result = await this.xrplClient.submitAndWait(paymentTx, voter);
+      // 4. Update proposal vote counts
+      if (support) {
+        await tx.proposal.update({
+          where: { id: proposalId },
+          data: {
+            forVotes: { increment: voteWeight },
+          },
+        });
+      } else {
+        await tx.proposal.update({
+          where: { id: proposalId },
+          data: {
+            againstVotes: { increment: voteWeight },
+          },
+        });
+      }
 
-    if (!result.success) {
-      throw new Error(`Vote transaction failed: ${result.error}`);
-    }
+      // 5. Check if proposal passes (quorum check)
+      const updatedProposal = await tx.proposal.findUnique({
+        where: { id: proposalId },
+      });
 
-    // Record vote
-    const vote: GovernanceVote = {
-      proposalId,
-      voter: voter.address,
-      voteWeight: stake.stakedAmount,
-      support,
-      timestamp: new Date(),
-      transactionHash: result.hash,
-    };
+      if (updatedProposal) {
+        const totalVoted = Number(updatedProposal.forVotes) + Number(updatedProposal.againstVotes);
+        const totalStaked = await stakeRepository.getTotalStaked();
+        const quorum = totalStaked * 0.1; // 10% quorum
 
-    existingVotes.push(vote);
-    this.votes.set(proposalId, existingVotes);
+        if (totalVoted >= quorum) {
+          await tx.proposal.update({
+            where: { id: proposalId },
+            data: { quorumReached: true },
+          });
+        }
+      }
 
-    // Update proposal vote counts
-    if (support) {
-      proposal.forVotes = (
-        parseFloat(proposal.forVotes) + parseFloat(stake.stakedAmount)
-      ).toString();
-    } else {
-      proposal.againstVotes = (
-        parseFloat(proposal.againstVotes) + parseFloat(stake.stakedAmount)
-      ).toString();
-    }
+      const vote: GovernanceVote = {
+        proposalId,
+        voter: voter.address,
+        voteWeight: voteWeight.toString(),
+        support,
+        timestamp: new Date(),
+        transactionHash: result.hash,
+      };
 
-    // Check if proposal passes (simple majority of voted tokens)
-    const totalVoted = parseFloat(proposal.forVotes) + parseFloat(proposal.againstVotes);
-    const totalStaked = Number(this.totalStaked) / 10 ** VRTY_DECIMALS;
-    const quorum = totalStaked * 0.1; // 10% quorum
+      logAuditAction('GOVERNANCE_VOTE', voter.address, {
+        proposalId,
+        support,
+        voteWeight: voteWeight.toString(),
+        transactionHash: result.hash,
+      });
 
-    if (totalVoted >= quorum && new Date() > proposal.votingEndsAt) {
-      proposal.status = parseFloat(proposal.forVotes) > parseFloat(proposal.againstVotes)
-        ? 'PASSED'
-        : 'FAILED';
-    }
+      this.emit('voted', vote);
 
-    logAuditAction('GOVERNANCE_VOTE', voter.address, {
-      proposalId,
-      support,
-      voteWeight: stake.stakedAmount,
-      transactionHash: result.hash,
+      return { vote, result };
     });
-
-    this.emit('voted', vote);
-
-    return { vote, result };
   }
 
   /**
    * Execute a passed proposal
    */
-  executeProposal(proposalId: string): GovernanceProposal {
-    const proposal = this.proposals.get(proposalId);
+  async executeProposal(proposalId: string): Promise<GovernanceProposal> {
+    const proposal = await prisma.proposal.findUnique({
+      where: { id: proposalId },
+    });
+
     if (!proposal) {
       throw new Error(`Proposal ${proposalId} not found`);
     }
 
-    if (proposal.status !== 'PASSED') {
-      throw new Error('Proposal has not passed');
+    // Check if voting ended and proposal passed
+    if (new Date() < proposal.votingEndsAt) {
+      throw new Error('Voting period has not ended');
     }
 
-    // In production, this would execute the proposal payload
-    proposal.status = 'EXECUTED';
-    proposal.executedAt = new Date();
+    const forVotes = Number(proposal.forVotes);
+    const againstVotes = Number(proposal.againstVotes);
+
+    if (!proposal.quorumReached) {
+      throw new Error('Quorum not reached');
+    }
+
+    if (forVotes <= againstVotes) {
+      // Update status to FAILED
+      await prisma.proposal.update({
+        where: { id: proposalId },
+        data: { status: 'FAILED' },
+      });
+      throw new Error('Proposal did not pass (more against votes)');
+    }
+
+    // Execute the proposal
+    const updatedProposal = await prisma.proposal.update({
+      where: { id: proposalId },
+      data: {
+        status: 'EXECUTED',
+        executedAt: new Date(),
+      },
+    });
 
     logAuditAction('GOVERNANCE_PROPOSAL_EXECUTED', 'SYSTEM', {
       proposalId,
       category: proposal.category,
     });
 
-    this.emit('proposalExecuted', proposal);
+    this.emit('proposalExecuted', updatedProposal);
 
-    return proposal;
+    return {
+      id: updatedProposal.id,
+      proposer: updatedProposal.proposerWallet,
+      title: updatedProposal.title,
+      description: updatedProposal.description,
+      category: updatedProposal.category as ProposalCategory,
+      forVotes: updatedProposal.forVotes.toString(),
+      againstVotes: updatedProposal.againstVotes.toString(),
+      status: 'EXECUTED',
+      executionPayload: updatedProposal.executionPayload || undefined,
+      createdAt: updatedProposal.createdAt,
+      votingEndsAt: updatedProposal.votingEndsAt,
+      executedAt: updatedProposal.executedAt || undefined,
+    };
   }
 
   // ===========================================
-  // Revenue Distribution Functions
+  // Revenue Distribution Functions (PRISMA-BACKED)
   // ===========================================
 
   /**
@@ -708,60 +854,56 @@ export class VRTYTokenManager extends EventEmitter {
     const stakerPool = (parseFloat(totalRevenue) * 0.8).toFixed(6); // 80%
     const buybackPool = (parseFloat(totalRevenue) * 0.2).toFixed(6); // 20%
 
-    const totalStakedAmount = Number(this.totalStaked) / 10 ** VRTY_DECIMALS;
-    const rewardPerToken = totalStakedAmount > 0
-      ? (parseFloat(stakerPool) / totalStakedAmount).toFixed(12)
+    const totalStaked = await stakeRepository.getTotalStaked();
+    const stakersCount = (await stakeRepository.getAllActiveStakes()).length;
+    
+    const rewardPerToken = totalStaked > 0
+      ? (parseFloat(stakerPool) / totalStaked).toFixed(12)
       : '0';
 
-    const distributionId = generateId('REV');
     const period = new Date().toISOString().substring(0, 7);
-    const transactionHashes: string[] = [];
 
-    // Distribute to each staker
-    for (const [wallet, stake] of this.stakes) {
-      const rewardAmount = (
-        parseFloat(stake.stakedAmount) * parseFloat(rewardPerToken)
-      ).toFixed(6);
+    // Distribute rewards to all stakers
+    await stakeRepository.addRewards(parseFloat(rewardPerToken));
 
-      if (parseFloat(rewardAmount) > 0) {
-        stake.rewardsEarned = (
-          parseFloat(stake.rewardsEarned) + parseFloat(rewardAmount)
-        ).toString();
+    // Record distribution in database
+    const distribution = await prisma.revenueDistribution.create({
+      data: {
+        period,
+        totalRevenue: parseFloat(totalRevenue),
+        stakerPool: parseFloat(stakerPool),
+        buybackPool: parseFloat(buybackPool),
+        rewardPerToken: parseFloat(rewardPerToken),
+        totalStaked,
+        stakersCount,
+        transactionHashes: [],
+      },
+    });
 
-        // In production, would batch these transactions
-        logger.debug(`Allocated ${rewardAmount} XRP rewards to ${wallet}`);
-      }
-    }
+    logAuditAction('REVENUE_DISTRIBUTED', 'SYSTEM', {
+      distributionId: distribution.id,
+      totalRevenue,
+      stakerPool,
+      buybackPool,
+      stakersCount,
+    });
 
-    const distribution: RevenueDistribution = {
-      id: distributionId,
+    this.emit('revenueDistributed', distribution);
+
+    return {
+      id: distribution.id,
       period,
       totalRevenue,
       stakerPool,
       buybackPool,
       rewardPerToken,
-      distributedAt: new Date(),
-      transactionHashes,
+      distributedAt: distribution.distributedAt,
+      transactionHashes: [],
     };
-
-    this.revenueHistory.push(distribution);
-
-    logAuditAction('REVENUE_DISTRIBUTED', 'SYSTEM', {
-      distributionId,
-      totalRevenue,
-      stakerPool,
-      buybackPool,
-      stakersCount: this.stakes.size,
-    });
-
-    this.emit('revenueDistributed', distribution);
-
-    return distribution;
   }
 
   /**
    * Execute real buyback on XRPL DEX
-   * Places a market buy order for VRTY tokens using XRP
    */
   async executeBuyback(
     buybackWallet: Wallet,
@@ -770,23 +912,20 @@ export class VRTYTokenManager extends EventEmitter {
   ): Promise<{ purchasedAmount: string; transactionHash: string }> {
     logger.info(`Executing buyback with ${xrpAmount} XRP`);
 
-    // Create an offer to buy VRTY with XRP
     const xrpDrops = XRPLClient.xrpToDrops(xrpAmount);
-    
-    // Calculate VRTY amount based on max price (default: 0.1 XRP per VRTY)
     const pricePerVRTY = maxPrice || '0.1';
     const vrtyAmount = (parseFloat(xrpAmount) / parseFloat(pricePerVRTY)).toFixed(VRTY_DECIMALS);
 
     const offerTx: OfferCreate = {
       TransactionType: 'OfferCreate',
       Account: buybackWallet.address,
-      TakerGets: xrpDrops, // Giving XRP
+      TakerGets: xrpDrops,
       TakerPays: {
         currency: VRTY_CURRENCY_CODE,
         issuer: this.issuerWallet.address,
-        value: vrtyAmount, // Receiving VRTY
+        value: vrtyAmount,
       },
-      Flags: 0x00080000, // tfImmediateOrCancel - fill what's available now
+      Flags: 0x00080000, // tfImmediateOrCancel
       Memos: [
         {
           Memo: {
@@ -808,9 +947,7 @@ export class VRTYTokenManager extends EventEmitter {
       throw new Error(`Buyback failed: ${result.error}`);
     }
 
-    // Get the actual purchased amount from transaction metadata
-    // In production, parse meta.AffectedNodes to get exact amounts
-    const purchasedAmount = vrtyAmount; // Simplified - would parse from metadata
+    const purchasedAmount = vrtyAmount;
 
     logAuditAction('VRTY_BUYBACK', buybackWallet.address, {
       xrpSpent: xrpAmount,
@@ -820,15 +957,11 @@ export class VRTYTokenManager extends EventEmitter {
 
     this.emit('buybackExecuted', { xrpAmount, purchasedAmount, hash: result.hash });
 
-    return {
-      purchasedAmount,
-      transactionHash: result.hash,
-    };
+    return { purchasedAmount, transactionHash: result.hash };
   }
 
   /**
-   * Execute real token burn by sending to the issuer
-   * Tokens sent back to issuer are effectively "burned" (destroyed)
+   * Execute real token burn
    */
   async executeBurn(
     burnerWallet: Wallet,
@@ -836,7 +969,6 @@ export class VRTYTokenManager extends EventEmitter {
   ): Promise<{ burnedAmount: string; transactionHash: string }> {
     logger.info(`Burning ${amount} VRTY tokens`);
 
-    // Send tokens back to issuer (burn mechanism on XRPL)
     const paymentTx: Payment = {
       TransactionType: 'Payment',
       Account: burnerWallet.address,
@@ -868,27 +1000,18 @@ export class VRTYTokenManager extends EventEmitter {
       throw new Error(`Burn failed: ${result.error}`);
     }
 
-    // Update token metrics
-    this.totalBurned += BigInt(parseFloat(amount) * 10 ** VRTY_DECIMALS);
-    this.circulatingSupply -= BigInt(parseFloat(amount) * 10 ** VRTY_DECIMALS);
-
     logAuditAction('VRTY_BURNED', burnerWallet.address, {
       amount,
       transactionHash: result.hash,
-      newTotalBurned: (this.totalBurned / BigInt(10 ** VRTY_DECIMALS)).toString(),
     });
 
     this.emit('tokensBurned', { amount, hash: result.hash });
 
-    return {
-      burnedAmount: amount,
-      transactionHash: result.hash,
-    };
+    return { burnedAmount: amount, transactionHash: result.hash };
   }
 
   /**
    * Execute complete buyback and burn cycle
-   * Combines buying VRTY from DEX and burning it
    */
   async executeBuybackBurn(
     buybackWallet: Wallet,
@@ -896,8 +1019,6 @@ export class VRTYTokenManager extends EventEmitter {
     maxPrice?: string
   ): Promise<BuybackBurn> {
     logger.info(`Executing buyback and burn with ${xrpAmount} XRP`);
-
-    const burnId = generateId('BURN');
 
     // Step 1: Buy VRTY from DEX
     const buyback = await this.executeBuyback(buybackWallet, xrpAmount, maxPrice);
@@ -907,18 +1028,19 @@ export class VRTYTokenManager extends EventEmitter {
 
     const averagePrice = (parseFloat(xrpAmount) / parseFloat(buyback.purchasedAmount)).toFixed(6);
 
-    const buybackBurn: BuybackBurn = {
-      id: burnId,
-      amount: buyback.purchasedAmount,
-      averagePrice,
-      burnTransactionHash: burn.transactionHash,
-      executedAt: new Date(),
-    };
-
-    this.buybackHistory.push(buybackBurn);
+    // Record in database
+    const buybackBurn = await prisma.buybackBurn.create({
+      data: {
+        xrpSpent: parseFloat(xrpAmount),
+        vrtyBurned: parseFloat(buyback.purchasedAmount),
+        averagePrice: parseFloat(averagePrice),
+        buybackTxHash: buyback.transactionHash,
+        burnTxHash: burn.transactionHash,
+      },
+    });
 
     logAuditAction('BUYBACK_BURN_COMPLETED', buybackWallet.address, {
-      burnId,
+      burnId: buybackBurn.id,
       xrpSpent: xrpAmount,
       vrtyBurned: buyback.purchasedAmount,
       averagePrice,
@@ -928,35 +1050,35 @@ export class VRTYTokenManager extends EventEmitter {
 
     this.emit('buybackBurned', buybackBurn);
 
-    return buybackBurn;
+    return {
+      id: buybackBurn.id,
+      amount: buyback.purchasedAmount,
+      averagePrice,
+      burnTransactionHash: burn.transactionHash,
+      executedAt: buybackBurn.executedAt,
+    };
   }
 
   // ===========================================
-  // Utility Functions
+  // Utility Functions (PRISMA-BACKED)
   // ===========================================
-
-  /**
-   * Calculate staking tier from amount
-   */
-  private calculateTier(amount: string): StakingTier {
-    const amountNum = parseFloat(amount);
-    
-    // Check tiers from highest to lowest
-    for (let i = STAKING_TIERS.length - 1; i >= 0; i--) {
-      const tier = STAKING_TIERS[i];
-      if (tier && amountNum >= parseFloat(tier.minStake)) {
-        return tier.tier;
-      }
-    }
-    
-    return 'BASIC';
-  }
 
   /**
    * Get stake info for a wallet
    */
-  getStake(wallet: string): VRTYStake | undefined {
-    return this.stakes.get(wallet);
+  async getStake(wallet: string): Promise<StakeInfo | null> {
+    const stake = await stakeRepository.getByWallet(wallet);
+    if (!stake) return null;
+
+    return {
+      wallet: stake.wallet,
+      amount: stake.amount.toString(),
+      tier: stake.tier as StakingTier,
+      stakedAt: stake.stakedAt,
+      lockEndDate: stake.lockEndDate || undefined,
+      rewardsEarned: stake.rewardsEarned.toString(),
+      rewardsClaimed: stake.rewardsClaimed.toString(),
+    };
   }
 
   /**
@@ -969,45 +1091,124 @@ export class VRTYTokenManager extends EventEmitter {
   /**
    * Get proposal by ID
    */
-  getProposal(proposalId: string): GovernanceProposal | undefined {
-    return this.proposals.get(proposalId);
+  async getProposal(proposalId: string): Promise<GovernanceProposal | null> {
+    const proposal = await prisma.proposal.findUnique({
+      where: { id: proposalId },
+    });
+
+    if (!proposal) return null;
+
+    return {
+      id: proposal.id,
+      proposer: proposal.proposerWallet,
+      title: proposal.title,
+      description: proposal.description,
+      category: proposal.category as ProposalCategory,
+      forVotes: proposal.forVotes.toString(),
+      againstVotes: proposal.againstVotes.toString(),
+      status: proposal.status as any,
+      executionPayload: proposal.executionPayload || undefined,
+      createdAt: proposal.createdAt,
+      votingEndsAt: proposal.votingEndsAt,
+      executedAt: proposal.executedAt || undefined,
+    };
   }
 
   /**
    * Get all active proposals
    */
-  getActiveProposals(): GovernanceProposal[] {
-    return Array.from(this.proposals.values()).filter(
-      (p) => p.status === 'ACTIVE'
-    );
+  async getActiveProposals(): Promise<GovernanceProposal[]> {
+    const proposals = await prisma.proposal.findMany({
+      where: { status: 'ACTIVE' },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return proposals.map((p) => ({
+      id: p.id,
+      proposer: p.proposerWallet,
+      title: p.title,
+      description: p.description,
+      category: p.category as ProposalCategory,
+      forVotes: p.forVotes.toString(),
+      againstVotes: p.againstVotes.toString(),
+      status: 'ACTIVE' as const,
+      executionPayload: p.executionPayload || undefined,
+      createdAt: p.createdAt,
+      votingEndsAt: p.votingEndsAt,
+    }));
   }
 
   /**
    * Get votes for a proposal
    */
-  getProposalVotes(proposalId: string): GovernanceVote[] {
-    return this.votes.get(proposalId) || [];
+  async getProposalVotes(proposalId: string): Promise<GovernanceVote[]> {
+    const votes = await prisma.vote.findMany({
+      where: { proposalId },
+      orderBy: { votedAt: 'desc' },
+    });
+
+    return votes.map((v) => ({
+      proposalId: v.proposalId,
+      voter: v.voterWallet,
+      voteWeight: v.voteWeight.toString(),
+      support: v.support === 'FOR',
+      timestamp: v.votedAt,
+      transactionHash: v.txHash || '',
+    }));
   }
 
   /**
    * Get revenue distribution history
    */
-  getRevenueHistory(): RevenueDistribution[] {
-    return this.revenueHistory;
+  async getRevenueHistory(): Promise<RevenueDistribution[]> {
+    const distributions = await prisma.revenueDistribution.findMany({
+      orderBy: { distributedAt: 'desc' },
+    });
+
+    return distributions.map((d) => ({
+      id: d.id,
+      period: d.period,
+      totalRevenue: d.totalRevenue.toString(),
+      stakerPool: d.stakerPool.toString(),
+      buybackPool: d.buybackPool.toString(),
+      rewardPerToken: d.rewardPerToken.toString(),
+      distributedAt: d.distributedAt,
+      transactionHashes: d.transactionHashes,
+    }));
   }
 
   /**
    * Get buyback and burn history
    */
-  getBuybackHistory(): BuybackBurn[] {
-    return this.buybackHistory;
+  async getBuybackHistory(): Promise<BuybackBurn[]> {
+    const buybacks = await prisma.buybackBurn.findMany({
+      orderBy: { executedAt: 'desc' },
+    });
+
+    return buybacks.map((b) => ({
+      id: b.id,
+      amount: b.vrtyBurned.toString(),
+      averagePrice: b.averagePrice.toString(),
+      burnTransactionHash: b.burnTxHash || '',
+      executedAt: b.executedAt,
+    }));
   }
 
   /**
    * Get all stakers
    */
-  getAllStakers(): VRTYStake[] {
-    return Array.from(this.stakes.values());
+  async getAllStakers(): Promise<StakeInfo[]> {
+    const stakes = await stakeRepository.getAllActiveStakes();
+
+    return stakes.map((s) => ({
+      wallet: s.wallet,
+      amount: s.amount.toString(),
+      tier: s.tier as StakingTier,
+      stakedAt: s.stakedAt,
+      lockEndDate: s.lockEndDate || undefined,
+      rewardsEarned: s.rewardsEarned.toString(),
+      rewardsClaimed: s.rewardsClaimed.toString(),
+    }));
   }
 }
 

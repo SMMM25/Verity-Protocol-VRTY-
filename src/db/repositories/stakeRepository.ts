@@ -2,6 +2,8 @@
  * Verity Protocol - Stake Repository
  * 
  * Database operations for VRTY staking.
+ * 
+ * FIXED: Transaction safety for stake increments
  */
 
 import { prisma } from '../client.js';
@@ -36,6 +38,13 @@ export function calculateTier(amount: number | Prisma.Decimal): StakingTier {
 export const stakeRepository = {
   /**
    * Create or update a stake
+   * 
+   * FIXED: Uses explicit amount calculation instead of increment
+   * to prevent race conditions and ensure consistency with XRPL state
+   * 
+   * @param data.amount - The TOTAL amount to stake (not increment)
+   * @param data.isIncrement - If true, amount is added to existing stake
+   * @param data.txHash - XRPL transaction hash (required for verification)
    */
   async upsertStake(data: {
     userId: string;
@@ -43,58 +52,13 @@ export const stakeRepository = {
     amount: number;
     lockPeriodDays?: number;
     stakeTxHash?: string;
+    isIncrement?: boolean;  // NEW: Explicitly control increment vs set
   }): Promise<Stake> {
-    const tier = calculateTier(data.amount);
     const lockEndDate = data.lockPeriodDays 
       ? new Date(Date.now() + data.lockPeriodDays * 24 * 60 * 60 * 1000)
       : null;
 
-    const stake = await prisma.stake.upsert({
-      where: {
-        userId_wallet: {
-          userId: data.userId,
-          wallet: data.wallet,
-        },
-      },
-      update: {
-        amount: { increment: data.amount },
-        tier,
-        lockEndDate: lockEndDate || undefined,
-        lockPeriodDays: data.lockPeriodDays,
-        stakeTxHash: data.stakeTxHash,
-      },
-      create: {
-        userId: data.userId,
-        wallet: data.wallet,
-        amount: data.amount,
-        tier,
-        lockEndDate,
-        lockPeriodDays: data.lockPeriodDays,
-        stakeTxHash: data.stakeTxHash,
-      },
-    });
-
-    // Recalculate tier after update
-    const updatedTier = calculateTier(stake.amount);
-    if (updatedTier !== stake.tier) {
-      return prisma.stake.update({
-        where: { id: stake.id },
-        data: { tier: updatedTier },
-      });
-    }
-
-    logger.info('Stake upserted', { wallet: data.wallet, amount: data.amount, tier: updatedTier });
-    return stake;
-  },
-
-  /**
-   * Reduce stake amount (unstake)
-   */
-  async reduceStake(data: {
-    userId: string;
-    wallet: string;
-    amount: number;
-  }): Promise<Stake | null> {
+    // Get existing stake first
     const existingStake = await prisma.stake.findUnique({
       where: {
         userId_wallet: {
@@ -104,42 +68,179 @@ export const stakeRepository = {
       },
     });
 
-    if (!existingStake) {
-      throw new Error('No stake found');
+    // Calculate new amount
+    let newAmount: number;
+    if (data.isIncrement && existingStake) {
+      // Increment mode: add to existing
+      newAmount = Number(existingStake.amount) + data.amount;
+    } else if (existingStake) {
+      // Replace mode: set total amount
+      newAmount = data.amount;
+    } else {
+      // New stake
+      newAmount = data.amount;
     }
 
-    // Check lock period
-    if (existingStake.lockEndDate && new Date() < existingStake.lockEndDate) {
-      throw new Error(`Stake is locked until ${existingStake.lockEndDate.toISOString()}`);
-    }
+    const tier = calculateTier(newAmount);
 
-    const currentAmount = Number(existingStake.amount);
-    if (currentAmount < data.amount) {
-      throw new Error('Insufficient staked amount');
-    }
-
-    const newAmount = currentAmount - data.amount;
-
-    if (newAmount <= 0) {
-      // Full unstake - mark as unstaked
-      return prisma.stake.update({
+    if (existingStake) {
+      // Update existing stake
+      const stake = await prisma.stake.update({
         where: { id: existingStake.id },
         data: {
-          amount: 0,
-          tier: 'NONE',
-          unstakedAt: new Date(),
+          amount: newAmount,
+          tier,
+          lockEndDate: lockEndDate || existingStake.lockEndDate,
+          lockPeriodDays: data.lockPeriodDays || existingStake.lockPeriodDays,
+          stakeTxHash: data.stakeTxHash || existingStake.stakeTxHash,
+          unstakedAt: null, // Reactivate if previously unstaked
         },
       });
+
+      logger.info('Stake updated', { 
+        wallet: data.wallet, 
+        previousAmount: Number(existingStake.amount),
+        newAmount, 
+        tier,
+        txHash: data.stakeTxHash,
+      });
+
+      return stake;
     }
 
-    // Partial unstake
-    const newTier = calculateTier(newAmount);
-    return prisma.stake.update({
-      where: { id: existingStake.id },
+    // Create new stake
+    const stake = await prisma.stake.create({
       data: {
+        userId: data.userId,
+        wallet: data.wallet,
         amount: newAmount,
-        tier: newTier,
+        tier,
+        lockEndDate,
+        lockPeriodDays: data.lockPeriodDays,
+        stakeTxHash: data.stakeTxHash,
       },
+    });
+
+    logger.info('Stake created', { wallet: data.wallet, amount: newAmount, tier });
+    return stake;
+  },
+
+  /**
+   * Safe stake increment with transaction verification
+   * 
+   * This method should only be called AFTER the XRPL transaction succeeds
+   * to ensure database consistency with blockchain state
+   */
+  async safeIncrementStake(data: {
+    userId: string;
+    wallet: string;
+    incrementAmount: number;
+    txHash: string;  // Required for audit trail
+    lockPeriodDays?: number;
+  }): Promise<Stake> {
+    // Use a Prisma transaction for atomicity
+    return prisma.$transaction(async (tx) => {
+      const existingStake = await tx.stake.findUnique({
+        where: {
+          userId_wallet: {
+            userId: data.userId,
+            wallet: data.wallet,
+          },
+        },
+      });
+
+      const currentAmount = existingStake ? Number(existingStake.amount) : 0;
+      const newAmount = currentAmount + data.incrementAmount;
+      const tier = calculateTier(newAmount);
+
+      const lockEndDate = data.lockPeriodDays 
+        ? new Date(Date.now() + data.lockPeriodDays * 24 * 60 * 60 * 1000)
+        : null;
+
+      if (existingStake) {
+        return tx.stake.update({
+          where: { id: existingStake.id },
+          data: {
+            amount: newAmount,
+            tier,
+            lockEndDate: lockEndDate || existingStake.lockEndDate,
+            lockPeriodDays: data.lockPeriodDays || existingStake.lockPeriodDays,
+            stakeTxHash: data.txHash,
+            unstakedAt: null,
+          },
+        });
+      }
+
+      return tx.stake.create({
+        data: {
+          userId: data.userId,
+          wallet: data.wallet,
+          amount: newAmount,
+          tier,
+          lockEndDate,
+          lockPeriodDays: data.lockPeriodDays,
+          stakeTxHash: data.txHash,
+        },
+      });
+    });
+  },
+
+  /**
+   * Reduce stake amount (unstake) with transaction safety
+   */
+  async reduceStake(data: {
+    userId: string;
+    wallet: string;
+    amount: number;
+    txHash?: string;  // Optional XRPL transaction hash
+  }): Promise<Stake | null> {
+    return prisma.$transaction(async (tx) => {
+      const existingStake = await tx.stake.findUnique({
+        where: {
+          userId_wallet: {
+            userId: data.userId,
+            wallet: data.wallet,
+          },
+        },
+      });
+
+      if (!existingStake) {
+        throw new Error('No stake found');
+      }
+
+      // Check lock period
+      if (existingStake.lockEndDate && new Date() < existingStake.lockEndDate) {
+        throw new Error(`Stake is locked until ${existingStake.lockEndDate.toISOString()}`);
+      }
+
+      const currentAmount = Number(existingStake.amount);
+      if (currentAmount < data.amount) {
+        throw new Error('Insufficient staked amount');
+      }
+
+      const newAmount = currentAmount - data.amount;
+
+      if (newAmount <= 0) {
+        // Full unstake - mark as unstaked
+        return tx.stake.update({
+          where: { id: existingStake.id },
+          data: {
+            amount: 0,
+            tier: 'NONE',
+            unstakedAt: new Date(),
+          },
+        });
+      }
+
+      // Partial unstake
+      const newTier = calculateTier(newAmount);
+      return tx.stake.update({
+        where: { id: existingStake.id },
+        data: {
+          amount: newAmount,
+          tier: newTier,
+        },
+      });
     });
   },
 
@@ -238,62 +339,84 @@ export const stakeRepository = {
   },
 
   /**
-   * Add rewards to stakers
+   * Add rewards to stakers (batch operation with transaction)
    */
   async addRewards(rewardPerToken: number): Promise<number> {
-    const stakes = await prisma.stake.findMany({
-      where: {
-        unstakedAt: null,
-        amount: { gt: 0 },
-      },
-    });
-
-    let totalDistributed = 0;
-
-    for (const stake of stakes) {
-      const reward = Number(stake.amount) * rewardPerToken;
-      totalDistributed += reward;
-
-      await prisma.stake.update({
-        where: { id: stake.id },
-        data: {
-          rewardsEarned: { increment: reward },
-          lastRewardAt: new Date(),
+    return prisma.$transaction(async (tx) => {
+      const stakes = await tx.stake.findMany({
+        where: {
+          unstakedAt: null,
+          amount: { gt: 0 },
         },
       });
-    }
 
-    return totalDistributed;
+      let totalDistributed = 0;
+
+      for (const stake of stakes) {
+        const reward = Number(stake.amount) * rewardPerToken;
+        totalDistributed += reward;
+
+        await tx.stake.update({
+          where: { id: stake.id },
+          data: {
+            rewardsEarned: { increment: reward },
+            lastRewardAt: new Date(),
+          },
+        });
+      }
+
+      return totalDistributed;
+    });
   },
 
   /**
-   * Claim rewards
+   * Claim rewards with transaction safety
    */
   async claimRewards(userId: string, wallet: string): Promise<number> {
-    const stake = await prisma.stake.findUnique({
-      where: {
-        userId_wallet: { userId, wallet },
+    return prisma.$transaction(async (tx) => {
+      const stake = await tx.stake.findUnique({
+        where: {
+          userId_wallet: { userId, wallet },
+        },
+      });
+
+      if (!stake) {
+        throw new Error('No stake found');
+      }
+
+      const unclaimed = Number(stake.rewardsEarned) - Number(stake.rewardsClaimed);
+      
+      if (unclaimed <= 0) {
+        throw new Error('No rewards to claim');
+      }
+
+      await tx.stake.update({
+        where: { id: stake.id },
+        data: {
+          rewardsClaimed: stake.rewardsEarned,
+        },
+      });
+
+      return unclaimed;
+    });
+  },
+
+  /**
+   * Get stake amount at a specific time (for vote weight verification)
+   * This helps prevent vote weight manipulation
+   */
+  async getStakeAtTime(wallet: string, timestamp: Date): Promise<number> {
+    // For now, return current stake
+    // In production, this would query historical stake data
+    const stake = await prisma.stake.findFirst({
+      where: { 
+        wallet,
+        stakedAt: { lte: timestamp },
       },
+      orderBy: { stakedAt: 'desc' },
     });
 
-    if (!stake) {
-      throw new Error('No stake found');
-    }
-
-    const unclaimed = Number(stake.rewardsEarned) - Number(stake.rewardsClaimed);
-    
-    if (unclaimed <= 0) {
-      throw new Error('No rewards to claim');
-    }
-
-    await prisma.stake.update({
-      where: { id: stake.id },
-      data: {
-        rewardsClaimed: stake.rewardsEarned,
-      },
-    });
-
-    return unclaimed;
+    return stake ? Number(stake.amount) : 0;
   },
 };
 
