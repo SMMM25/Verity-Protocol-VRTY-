@@ -1,0 +1,49 @@
+{
+  "name": "Wrapped Verity Protocol Token",
+  "symbol": "wVRTY",
+  "description": "wVRTY is the wrapped version of VRTY (Verity Protocol Token) on the Solana blockchain. It represents VRTY tokens locked on the XRP Ledger and can be bridged back at any time. The Verity Protocol is a decentralized verification and governance ecosystem.",
+  "image": "https://raw.githubusercontent.com/SMMM25/Verity-Protocol-VRTY-/main/solana/metadata/wvrty-logo.png",
+  "external_url": "https://github.com/SMMM25/Verity-Protocol-VRTY-",
+  "attributes": [
+    {
+      "trait_type": "Token Type",
+      "value": "Wrapped"
+    },
+    {
+      "trait_type": "Original Chain",
+      "value": "XRP Ledger"
+    },
+    {
+      "trait_type": "Original Token",
+      "value": "VRTY"
+    },
+    {
+      "trait_type": "XRPL Issuer",
+      "value": "rBeHfq9vRjZ8Cth1sMbp2nJvExmxSxAH8f"
+    },
+    {
+      "trait_type": "Bridge Type",
+      "value": "Lock and Mint"
+    },
+    {
+      "trait_type": "Decimals",
+      "value": "6"
+    }
+  ],
+  "properties": {
+    "files": [
+      {
+        "uri": "https://raw.githubusercontent.com/SMMM25/Verity-Protocol-VRTY-/main/solana/metadata/wvrty-logo.png",
+        "type": "image/png"
+      }
+    ],
+    "category": "currency",
+    "creators": []
+  },
+  "xrplReference": {
+    "issuer": "rBeHfq9vRjZ8Cth1sMbp2nJvExmxSxAH8f",
+    "totalSupply": "1000000000",
+    "distributionWallet": "rLmLMErLKDzWXyYmcZGHqQ3SCgTVJCVjA3",
+    "currencyCode": "VRTY"
+  }
+}
