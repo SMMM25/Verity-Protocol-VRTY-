@@ -1,6 +1,8 @@
 /**
  * Verity Protocol - Tax Routes
- * Auto-Tax™ compliance engine endpoints with 200+ jurisdiction support
+ * Auto-Tax Compliance Engine endpoints with 200+ jurisdiction support
+ * 
+ * Updated to support PostgreSQL-backed AutoTaxEngine (async methods)
  */
 
 import { Router, Request, Response } from 'express';
@@ -52,7 +54,7 @@ router.post('/calculate', async (req: Request, res: Response) => {
     const taxEngine = getTaxEngine();
 
     // Check if user has a profile
-    const profile = taxEngine.getTaxProfile(userId);
+    const profile = await taxEngine.getTaxProfile(userId);
     if (!profile) {
       return res.status(400).json({
         success: false,
@@ -64,7 +66,7 @@ router.post('/calculate', async (req: Request, res: Response) => {
     }
 
     // Record the transaction
-    const recordedTx = taxEngine.recordTransaction(userId, {
+    const recordedTx = await taxEngine.recordTransaction(userId, {
       type: validatedTx.type,
       asset: validatedTx.asset,
       amount: validatedTx.amount,
@@ -76,7 +78,7 @@ router.post('/calculate', async (req: Request, res: Response) => {
     });
 
     // Calculate tax
-    const taxCalculation = taxEngine.calculateVerifiedTransactionTax(userId, recordedTx);
+    const taxCalculation = await taxEngine.calculateVerifiedTransactionTax(userId, recordedTx);
 
     res.json({
       success: true,
@@ -155,7 +157,7 @@ router.post('/profile', async (req: Request, res: Response) => {
       });
     }
 
-    const profile = taxEngine.setTaxProfile(userId, {
+    const profile = await taxEngine.setTaxProfile(userId, {
       taxResidence: validatedData.taxResidence,
       taxId: validatedData.taxId,
       costBasisMethod: validatedData.costBasisMethod,
@@ -215,7 +217,7 @@ router.get('/profile/:userId', async (req: Request, res: Response) => {
     const userId = req.params['userId'] || '';
     const taxEngine = getTaxEngine();
 
-    const profile = taxEngine.getTaxProfile(userId);
+    const profile = await taxEngine.getTaxProfile(userId);
 
     if (!profile) {
       return res.status(404).json({
@@ -257,7 +259,7 @@ router.get('/transactions/:userId', async (req: Request, res: Response) => {
     const { taxYear, asset, page = '1', limit = '50' } = req.query;
 
     const taxEngine = getTaxEngine();
-    let transactions = taxEngine.getUserTransactions(userId);
+    let transactions = await taxEngine.getUserTransactions(userId);
 
     // Filter by tax year if provided
     if (taxYear) {
@@ -319,7 +321,7 @@ router.get('/summary/:userId/:taxYear', async (req: Request, res: Response) => {
     const taxYear = req.params['taxYear'] || '';
     const taxEngine = getTaxEngine();
 
-    const profile = taxEngine.getTaxProfile(userId);
+    const profile = await taxEngine.getTaxProfile(userId);
     if (!profile) {
       return res.status(404).json({
         success: false,
@@ -330,7 +332,7 @@ router.get('/summary/:userId/:taxYear', async (req: Request, res: Response) => {
       });
     }
 
-    const summary = taxEngine.getTaxSummary(userId, parseInt(taxYear, 10));
+    const summary = await taxEngine.getTaxSummary(userId, parseInt(taxYear, 10));
 
     res.json({
       success: true,
@@ -371,7 +373,7 @@ router.post('/report/generate', async (req: Request, res: Response) => {
     }
 
     const taxEngine = getTaxEngine();
-    const report = taxEngine.generateTaxReport(
+    const report = await taxEngine.generateTaxReport(
       userId,
       taxYear,
       format as 'IRS_8949' | 'HMRC' | 'GENERIC'
@@ -650,7 +652,7 @@ router.get('/audit/:userId', async (req: Request, res: Response) => {
     const userId = req.params['userId'] || '';
     const taxEngine = getTaxEngine();
 
-    const auditLedger = taxEngine.getAuditLedger(userId);
+    const auditLedger = await taxEngine.getAuditLedger(userId);
 
     res.json({
       success: true,
@@ -686,7 +688,7 @@ router.get('/cost-basis/:userId/:asset', async (req: Request, res: Response) => 
     const asset = req.params['asset'] || '';
     const taxEngine = getTaxEngine();
 
-    const lots = taxEngine.getCostBasisLots(userId, asset);
+    const lots = await taxEngine.getCostBasisLots(userId, asset);
 
     res.json({
       success: true,

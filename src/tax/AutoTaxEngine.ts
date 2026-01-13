@@ -1,17 +1,20 @@
 /**
- * Verity Protocol - Auto-Tax™ Compliance Engine
+ * Verity Protocol - Auto-Tax Compliance Engine
  * Real-time tax calculations with transparent methodology across 200+ jurisdictions
+ * 
+ * MIGRATED TO POSTGRESQL via Prisma for production persistence
  */
 
 import { EventEmitter } from 'eventemitter3';
+import { prisma } from '../db/client.js';
 import { logger, logAuditAction } from '../utils/logger.js';
 import { generateId, generateVerificationHash } from '../utils/crypto.js';
 import type {
-  TaxProfile,
-  TaxCalculation,
-  TaxTransactionType,
-  TaxReport,
-  CostBasisMethod,
+  TaxProfile as TaxProfileType,
+  TaxCalculation as TaxCalculationType,
+  TaxTransactionType as TaxTransactionTypeEnum,
+  TaxReport as TaxReportType,
+  CostBasisMethod as CostBasisMethodType,
 } from '../types/index.js';
 import {
   JURISDICTION_RULES,
@@ -23,6 +26,7 @@ import {
   getHoldingPeriodExemptionJurisdictions,
   getJurisdictionsWithTreaty,
 } from './jurisdictions.js';
+import type { CostBasisMethod as PrismaCostBasisMethod, TaxTransactionType, TaxCalculationType as PrismaTaxCalculationType } from '@prisma/client';
 
 // Re-export for backward compatibility
 export type { JurisdictionRules } from './jurisdictions.js';
@@ -64,72 +68,140 @@ export interface TaxSummary {
   estimatedTax: string;
 }
 
+// Map TypeScript types to Prisma enum values
+const mapCostBasisMethod = (method: CostBasisMethodType): PrismaCostBasisMethod => {
+  return method as PrismaCostBasisMethod;
+};
+
+const mapTxType = (type: TaxTransaction['type']): TaxTransactionType => {
+  return type as TaxTransactionType;
+};
+
+const mapTaxType = (type: TaxTransactionTypeEnum): PrismaTaxCalculationType => {
+  return type as PrismaTaxCalculationType;
+};
+
 /**
  * Verity Auto-Tax Engine
- * Automated tax calculation and reporting
+ * Automated tax calculation and reporting with PostgreSQL persistence
  */
 export class VerityAutoTaxEngine extends EventEmitter {
-  // In-memory storage (would be database in production)
-  private userProfiles: Map<string, TaxProfile> = new Map();
-  private costBasisLots: Map<string, CostBasisLot[]> = new Map(); // By userId + asset
-  private transactions: Map<string, TaxTransaction[]> = new Map(); // By userId
-  private taxCalculations: Map<string, TaxCalculation[]> = new Map(); // By userId
-  private auditLedger: Map<string, unknown[]> = new Map();
-
   constructor() {
     super();
-    logger.info('Verity Auto-Tax Engine initialized');
+    logger.info('Verity Auto-Tax Engine initialized with PostgreSQL persistence');
   }
 
   /**
    * Create or update a user's tax profile
    */
-  setTaxProfile(userId: string, profile: Omit<TaxProfile, 'userId'>): TaxProfile {
-    const fullProfile: TaxProfile = {
-      userId,
-      ...profile,
-    };
-
-    this.userProfiles.set(userId, fullProfile);
+  async setTaxProfile(userId: string, profile: Omit<TaxProfileType, 'userId'>): Promise<TaxProfileType> {
+    const dbProfile = await prisma.taxProfile.upsert({
+      where: { userId },
+      update: {
+        taxResidence: profile.taxResidence,
+        taxId: profile.taxId || null,
+        costBasisMethod: mapCostBasisMethod(profile.costBasisMethod),
+        treatyBenefits: profile.treatyBenefits || [],
+        filingStatus: profile.filingStatus || null,
+      },
+      create: {
+        userId,
+        taxResidence: profile.taxResidence,
+        taxId: profile.taxId || null,
+        costBasisMethod: mapCostBasisMethod(profile.costBasisMethod),
+        treatyBenefits: profile.treatyBenefits || [],
+        filingStatus: profile.filingStatus || null,
+      },
+    });
 
     logAuditAction('TAX_PROFILE_SET', userId, {
       jurisdiction: profile.taxResidence,
       costBasisMethod: profile.costBasisMethod,
     });
 
-    return fullProfile;
+    return {
+      userId: dbProfile.userId,
+      taxResidence: dbProfile.taxResidence,
+      taxId: dbProfile.taxId || undefined,
+      costBasisMethod: dbProfile.costBasisMethod as CostBasisMethodType,
+      treatyBenefits: dbProfile.treatyBenefits,
+      filingStatus: dbProfile.filingStatus || undefined,
+    };
   }
 
   /**
    * Get user's tax profile
    */
-  getTaxProfile(userId: string): TaxProfile | undefined {
-    return this.userProfiles.get(userId);
+  async getTaxProfile(userId: string): Promise<TaxProfileType | undefined> {
+    const dbProfile = await prisma.taxProfile.findUnique({
+      where: { userId },
+    });
+
+    if (!dbProfile) return undefined;
+
+    return {
+      userId: dbProfile.userId,
+      taxResidence: dbProfile.taxResidence,
+      taxId: dbProfile.taxId || undefined,
+      costBasisMethod: dbProfile.costBasisMethod as CostBasisMethodType,
+      treatyBenefits: dbProfile.treatyBenefits,
+      filingStatus: dbProfile.filingStatus || undefined,
+    };
   }
 
   /**
    * Record a transaction for tax tracking
    */
-  recordTransaction(userId: string, transaction: Omit<TaxTransaction, 'id'>): TaxTransaction {
-    const tx: TaxTransaction = {
-      id: generateId('TX'),
-      ...transaction,
-    };
+  async recordTransaction(userId: string, transaction: Omit<TaxTransaction, 'id'>): Promise<TaxTransaction> {
+    // Ensure profile exists
+    const profile = await prisma.taxProfile.findUnique({
+      where: { userId },
+    });
 
-    const userTxs = this.transactions.get(userId) || [];
-    userTxs.push(tx);
-    this.transactions.set(userId, userTxs);
+    if (!profile) {
+      throw new Error('Tax profile not found. Please create a tax profile first.');
+    }
+
+    const txId = generateId('TX');
+
+    // Create the transaction record
+    const dbTx = await prisma.taxTransaction.create({
+      data: {
+        id: txId,
+        profileId: profile.id,
+        type: mapTxType(transaction.type),
+        asset: transaction.asset,
+        amount: parseFloat(transaction.amount),
+        pricePerUnit: parseFloat(transaction.pricePerUnit),
+        totalValue: parseFloat(transaction.totalValue),
+        fee: transaction.fee ? parseFloat(transaction.fee) : null,
+        txHash: transaction.transactionHash,
+        timestamp: transaction.timestamp,
+      },
+    });
 
     // Update cost basis lots for buys
-    if (tx.type === 'BUY' || tx.type === 'AIRDROP' || tx.type === 'STAKING_REWARD') {
-      this.addCostBasisLot(userId, {
-        asset: tx.asset,
-        amount: tx.amount,
-        costBasis: tx.type === 'BUY' ? tx.totalValue : '0', // Airdrops/rewards have $0 cost basis
-        acquiredAt: tx.timestamp,
-        transactionHash: tx.transactionHash,
+    if (transaction.type === 'BUY' || transaction.type === 'AIRDROP' || transaction.type === 'STAKING_REWARD') {
+      await this.addCostBasisLot(profile.id, {
+        asset: transaction.asset,
+        amount: transaction.amount,
+        costBasis: transaction.type === 'BUY' ? transaction.totalValue : '0',
+        acquiredAt: transaction.timestamp,
+        transactionHash: transaction.transactionHash,
       });
     }
+
+    const tx: TaxTransaction = {
+      id: dbTx.id,
+      type: dbTx.type as TaxTransaction['type'],
+      asset: dbTx.asset,
+      amount: dbTx.amount.toString(),
+      pricePerUnit: dbTx.pricePerUnit.toString(),
+      totalValue: dbTx.totalValue.toString(),
+      fee: dbTx.fee?.toString(),
+      timestamp: dbTx.timestamp,
+      transactionHash: dbTx.txHash,
+    };
 
     this.emit('transactionRecorded', tx);
 
@@ -139,32 +211,46 @@ export class VerityAutoTaxEngine extends EventEmitter {
   /**
    * Add a cost basis lot
    */
-  private addCostBasisLot(
-    userId: string,
+  private async addCostBasisLot(
+    profileId: string,
     lot: Omit<CostBasisLot, 'id'>
-  ): CostBasisLot {
-    const key = `${userId}:${lot.asset}`;
-    const lots = this.costBasisLots.get(key) || [];
+  ): Promise<CostBasisLot> {
+    const lotId = generateId('LOT');
 
-    const newLot: CostBasisLot = {
-      id: generateId('LOT'),
-      ...lot,
+    const dbLot = await prisma.costBasisLot.create({
+      data: {
+        id: lotId,
+        profileId,
+        asset: lot.asset,
+        amount: parseFloat(lot.amount),
+        costBasis: parseFloat(lot.costBasis),
+        remainingAmount: parseFloat(lot.amount),
+        acquiredAt: lot.acquiredAt,
+        txHash: lot.transactionHash || null,
+      },
+    });
+
+    return {
+      id: dbLot.id,
+      asset: dbLot.asset,
+      amount: dbLot.amount.toString(),
+      costBasis: dbLot.costBasis.toString(),
+      acquiredAt: dbLot.acquiredAt,
+      transactionHash: dbLot.txHash || undefined,
     };
-
-    lots.push(newLot);
-    this.costBasisLots.set(key, lots);
-
-    return newLot;
   }
 
   /**
    * Calculate tax for a transaction with transparent methodology
    */
-  calculateVerifiedTransactionTax(
+  async calculateVerifiedTransactionTax(
     userId: string,
     transaction: TaxTransaction
-  ): TaxCalculation {
-    const profile = this.userProfiles.get(userId);
+  ): Promise<TaxCalculationType> {
+    const profile = await prisma.taxProfile.findUnique({
+      where: { userId },
+    });
+
     if (!profile) {
       throw new Error('Tax profile not found');
     }
@@ -175,18 +261,18 @@ export class VerityAutoTaxEngine extends EventEmitter {
     }
 
     // Classify the transaction
-    const txType = this.classifyTransactionWithVerification(transaction, profile);
+    const txType = this.classifyTransactionWithVerification(transaction, profile.costBasisMethod as CostBasisMethodType);
 
-    let taxCalculation: TaxCalculation;
+    let taxCalculation: TaxCalculationType;
 
     switch (txType) {
       case 'CAPITAL_GAIN':
       case 'CAPITAL_LOSS':
-        taxCalculation = this.calculateCapitalGainsTax(
-          userId,
+        taxCalculation = await this.calculateCapitalGainsTax(
+          profile.id,
           transaction,
           jurisdictionRules,
-          profile.costBasisMethod
+          profile.costBasisMethod as CostBasisMethodType
         );
         break;
 
@@ -194,7 +280,7 @@ export class VerityAutoTaxEngine extends EventEmitter {
         taxCalculation = this.calculateDividendTax(
           transaction,
           jurisdictionRules,
-          this.checkVerifiedTreatyBenefits(profile)
+          this.checkVerifiedTreatyBenefits(profile.treatyBenefits)
         );
         break;
 
@@ -221,13 +307,30 @@ export class VerityAutoTaxEngine extends EventEmitter {
         };
     }
 
-    // Store calculation
-    const userCalcs = this.taxCalculations.get(userId) || [];
-    userCalcs.push(taxCalculation);
-    this.taxCalculations.set(userId, userCalcs);
+    // Store calculation in database
+    const verificationHash = generateVerificationHash(taxCalculation);
+    
+    await prisma.taxCalculation.create({
+      data: {
+        profileId: profile.id,
+        transactionId: transaction.id,
+        transactionType: mapTaxType(taxCalculation.transactionType),
+        proceeds: parseFloat(taxCalculation.proceeds),
+        costBasis: parseFloat(taxCalculation.costBasis),
+        gainLoss: parseFloat(taxCalculation.gainLoss),
+        taxableAmount: parseFloat(taxCalculation.taxableAmount),
+        taxRate: taxCalculation.taxRate,
+        taxOwed: parseFloat(taxCalculation.taxOwed),
+        jurisdiction: taxCalculation.jurisdiction,
+        methodology: taxCalculation.methodology,
+        isLongTerm: taxCalculation.methodology.includes('long-term'),
+        verificationHash,
+        calculatedAt: taxCalculation.calculatedAt,
+      },
+    });
 
-    // Log to audit ledger
-    this.logToAuditLedger(userId, taxCalculation);
+    // Log to audit trail
+    await this.logToAuditLedger(profile.id, taxCalculation);
 
     this.emit('taxCalculated', taxCalculation);
 
@@ -239,11 +342,10 @@ export class VerityAutoTaxEngine extends EventEmitter {
    */
   private classifyTransactionWithVerification(
     transaction: TaxTransaction,
-    profile: TaxProfile
-  ): TaxTransactionType {
+    _costBasisMethod: CostBasisMethodType
+  ): TaxTransactionTypeEnum {
     switch (transaction.type) {
       case 'SELL':
-        // Determine if gain or loss based on cost basis
         return 'CAPITAL_GAIN'; // Simplified - would check actual gain/loss
 
       case 'DIVIDEND':
@@ -265,18 +367,21 @@ export class VerityAutoTaxEngine extends EventEmitter {
   /**
    * Calculate capital gains tax
    */
-  private calculateCapitalGainsTax(
-    userId: string,
+  private async calculateCapitalGainsTax(
+    profileId: string,
     transaction: TaxTransaction,
     rules: JurisdictionRules,
-    costBasisMethod: CostBasisMethod
-  ): TaxCalculation {
-    // Get cost basis lots for this asset
-    const key = `${userId}:${transaction.asset}`;
-    const lots = this.costBasisLots.get(key) || [];
-
-    // Sort lots based on cost basis method
-    const sortedLots = this.sortLotsByCostBasisMethod(lots, costBasisMethod);
+    costBasisMethod: CostBasisMethodType
+  ): Promise<TaxCalculationType> {
+    // Get cost basis lots for this asset from database
+    const lots = await prisma.costBasisLot.findMany({
+      where: {
+        profileId,
+        asset: transaction.asset,
+        remainingAmount: { gt: 0 },
+      },
+      orderBy: this.getLotOrderBy(costBasisMethod),
+    });
 
     // Calculate cost basis for the sold amount
     let remainingAmount = parseFloat(transaction.amount);
@@ -284,15 +389,21 @@ export class VerityAutoTaxEngine extends EventEmitter {
     let isLongTerm = true;
     const now = new Date();
 
-    for (const lot of sortedLots) {
+    for (const lot of lots) {
       if (remainingAmount <= 0) break;
 
-      const lotAmount = parseFloat(lot.amount);
+      const lotAmount = lot.remainingAmount.toNumber();
       const usedAmount = Math.min(lotAmount, remainingAmount);
-      const lotCostPerUnit = parseFloat(lot.costBasis) / lotAmount;
+      const lotCostPerUnit = lot.costBasis.toNumber() / lot.amount.toNumber();
       
       totalCostBasis += usedAmount * lotCostPerUnit;
       remainingAmount -= usedAmount;
+
+      // Update remaining amount in lot
+      await prisma.costBasisLot.update({
+        where: { id: lot.id },
+        data: { remainingAmount: lotAmount - usedAmount },
+      });
 
       // Check holding period
       const holdingDays = Math.floor(
@@ -331,19 +442,34 @@ export class VerityAutoTaxEngine extends EventEmitter {
   }
 
   /**
+   * Get order by clause for cost basis method
+   */
+  private getLotOrderBy(method: CostBasisMethodType): { acquiredAt?: 'asc' | 'desc'; costBasis?: 'desc' } {
+    switch (method) {
+      case 'FIFO':
+        return { acquiredAt: 'asc' };
+      case 'LIFO':
+        return { acquiredAt: 'desc' };
+      case 'HIFO':
+        return { costBasis: 'desc' };
+      default:
+        return { acquiredAt: 'asc' };
+    }
+  }
+
+  /**
    * Calculate dividend tax
    */
   private calculateDividendTax(
     transaction: TaxTransaction,
     rules: JurisdictionRules,
     hasTreatyBenefits: boolean
-  ): TaxCalculation {
+  ): TaxCalculationType {
     const dividendAmount = parseFloat(transaction.totalValue);
     let taxRate = rules.dividendRate;
 
-    // Apply treaty benefits if applicable
     if (hasTreatyBenefits) {
-      taxRate = Math.min(taxRate, 15); // Common treaty rate
+      taxRate = Math.min(taxRate, 15);
     }
 
     const taxOwed = (dividendAmount * taxRate) / 100;
@@ -369,9 +495,9 @@ export class VerityAutoTaxEngine extends EventEmitter {
   private calculateOrdinaryIncomeTax(
     transaction: TaxTransaction,
     rules: JurisdictionRules
-  ): TaxCalculation {
+  ): TaxCalculationType {
     const incomeAmount = parseFloat(transaction.totalValue);
-    const taxRate = rules.shortTermRate; // Ordinary income taxed at regular rates
+    const taxRate = rules.shortTermRate;
 
     const taxOwed = (incomeAmount * taxRate) / 100;
 
@@ -391,99 +517,138 @@ export class VerityAutoTaxEngine extends EventEmitter {
   }
 
   /**
-   * Sort cost basis lots based on method
-   */
-  private sortLotsByCostBasisMethod(
-    lots: CostBasisLot[],
-    method: CostBasisMethod
-  ): CostBasisLot[] {
-    const sortedLots = [...lots];
-
-    switch (method) {
-      case 'FIFO':
-        return sortedLots.sort(
-          (a, b) => a.acquiredAt.getTime() - b.acquiredAt.getTime()
-        );
-
-      case 'LIFO':
-        return sortedLots.sort(
-          (a, b) => b.acquiredAt.getTime() - a.acquiredAt.getTime()
-        );
-
-      case 'HIFO':
-        return sortedLots.sort(
-          (a, b) =>
-            parseFloat(b.costBasis) / parseFloat(b.amount) -
-            parseFloat(a.costBasis) / parseFloat(a.amount)
-        );
-
-      case 'AVERAGE':
-        // For average cost, we don't sort - calculate average cost instead
-        return sortedLots;
-
-      case 'SPECIFIC_ID':
-        // Would require specific lot selection
-        return sortedLots;
-
-      default:
-        return sortedLots;
-    }
-  }
-
-  /**
    * Check if user has treaty benefits
    */
-  private checkVerifiedTreatyBenefits(profile: TaxProfile): boolean {
-    return profile.treatyBenefits && profile.treatyBenefits.length > 0;
+  private checkVerifiedTreatyBenefits(treatyBenefits: string[]): boolean {
+    return treatyBenefits && treatyBenefits.length > 0;
   }
 
   /**
    * Log calculation to audit ledger
    */
-  private logToAuditLedger(userId: string, calculation: TaxCalculation): void {
-    const ledger = this.auditLedger.get(userId) || [];
-    ledger.push({
-      type: 'TAX_CALCULATION',
-      data: calculation,
-      verificationHash: generateVerificationHash(calculation),
-      timestamp: new Date(),
+  private async logToAuditLedger(profileId: string, calculation: TaxCalculationType): Promise<void> {
+    await prisma.taxAuditEntry.create({
+      data: {
+        profileId,
+        entryType: 'TAX_CALCULATION',
+        data: JSON.parse(JSON.stringify(calculation)),
+        verificationHash: generateVerificationHash(calculation),
+      },
     });
-    this.auditLedger.set(userId, ledger);
   }
 
   /**
    * Generate tax report for a year
    */
-  generateTaxReport(
+  async generateTaxReport(
     userId: string,
     taxYear: number,
     format: 'IRS_8949' | 'HMRC' | 'GENERIC' = 'GENERIC'
-  ): TaxReport {
-    const profile = this.userProfiles.get(userId);
+  ): Promise<TaxReportType> {
+    const profile = await prisma.taxProfile.findUnique({
+      where: { userId },
+    });
+
     if (!profile) {
       throw new Error('Tax profile not found');
     }
 
-    const calculations = (this.taxCalculations.get(userId) || []).filter(
-      (c) => c.calculatedAt.getFullYear() === taxYear
-    );
+    // Get calculations for the year
+    const startDate = new Date(taxYear, 0, 1);
+    const endDate = new Date(taxYear + 1, 0, 1);
+
+    const calculations = await prisma.taxCalculation.findMany({
+      where: {
+        profileId: profile.id,
+        calculatedAt: {
+          gte: startDate,
+          lt: endDate,
+        },
+      },
+    });
 
     // Aggregate calculations
     let totalGains = 0;
     let totalLosses = 0;
     let totalTaxOwed = 0;
+    let shortTermGains = 0;
+    let shortTermLosses = 0;
+    let longTermGains = 0;
+    let longTermLosses = 0;
+    let dividendIncome = 0;
+    let stakingIncome = 0;
 
     for (const calc of calculations) {
-      const gainLoss = parseFloat(calc.gainLoss);
+      const gainLoss = calc.gainLoss.toNumber();
+      
       if (gainLoss > 0) {
         totalGains += gainLoss;
+        if (calc.isLongTerm) {
+          longTermGains += gainLoss;
+        } else {
+          shortTermGains += gainLoss;
+        }
       } else {
         totalLosses += Math.abs(gainLoss);
+        if (calc.isLongTerm) {
+          longTermLosses += Math.abs(gainLoss);
+        } else {
+          shortTermLosses += Math.abs(gainLoss);
+        }
       }
-      totalTaxOwed += parseFloat(calc.taxOwed);
+      
+      totalTaxOwed += calc.taxOwed.toNumber();
+
+      if (calc.transactionType === 'DIVIDEND_INCOME') {
+        dividendIncome += gainLoss;
+      } else if (calc.transactionType === 'ORDINARY_INCOME') {
+        stakingIncome += gainLoss;
+      }
     }
 
-    const report: TaxReport = {
+    // Save report to database
+    const dbReport = await prisma.taxReport.upsert({
+      where: {
+        profileId_taxYear: {
+          profileId: profile.id,
+          taxYear,
+        },
+      },
+      update: {
+        reportFormat: format,
+        totalGains,
+        totalLosses,
+        netGainLoss: totalGains - totalLosses,
+        totalTaxOwed,
+        shortTermGains,
+        shortTermLosses,
+        longTermGains,
+        longTermLosses,
+        dividendIncome,
+        stakingIncome,
+        transactionCount: calculations.length,
+        generatedAt: new Date(),
+      },
+      create: {
+        profileId: profile.id,
+        taxYear,
+        jurisdiction: profile.taxResidence,
+        reportFormat: format,
+        totalGains,
+        totalLosses,
+        netGainLoss: totalGains - totalLosses,
+        totalTaxOwed,
+        shortTermGains,
+        shortTermLosses,
+        longTermGains,
+        longTermLosses,
+        dividendIncome,
+        stakingIncome,
+        transactionCount: calculations.length,
+      },
+    });
+
+    const report: TaxReportType = {
       userId,
       taxYear,
       jurisdiction: profile.taxResidence,
@@ -491,8 +656,20 @@ export class VerityAutoTaxEngine extends EventEmitter {
       totalLosses: totalLosses.toFixed(2),
       netGainLoss: (totalGains - totalLosses).toFixed(2),
       totalTaxOwed: totalTaxOwed.toFixed(2),
-      transactions: calculations,
-      generatedAt: new Date(),
+      transactions: calculations.map(c => ({
+        transactionId: c.transactionId,
+        transactionType: c.transactionType as TaxTransactionTypeEnum,
+        proceeds: c.proceeds.toString(),
+        costBasis: c.costBasis.toString(),
+        gainLoss: c.gainLoss.toString(),
+        taxableAmount: c.taxableAmount.toString(),
+        taxRate: c.taxRate.toNumber(),
+        taxOwed: c.taxOwed.toString(),
+        jurisdiction: c.jurisdiction,
+        methodology: c.methodology,
+        calculatedAt: c.calculatedAt,
+      })),
+      generatedAt: dbReport.generatedAt,
       reportFormat: format,
     };
 
@@ -510,15 +687,27 @@ export class VerityAutoTaxEngine extends EventEmitter {
   /**
    * Generate tax summary for dashboard
    */
-  getTaxSummary(userId: string, taxYear: number): TaxSummary {
-    const profile = this.userProfiles.get(userId);
+  async getTaxSummary(userId: string, taxYear: number): Promise<TaxSummary> {
+    const profile = await prisma.taxProfile.findUnique({
+      where: { userId },
+    });
+
     if (!profile) {
       throw new Error('Tax profile not found');
     }
 
-    const calculations = (this.taxCalculations.get(userId) || []).filter(
-      (c) => c.calculatedAt.getFullYear() === taxYear
-    );
+    const startDate = new Date(taxYear, 0, 1);
+    const endDate = new Date(taxYear + 1, 0, 1);
+
+    const calculations = await prisma.taxCalculation.findMany({
+      where: {
+        profileId: profile.id,
+        calculatedAt: {
+          gte: startDate,
+          lt: endDate,
+        },
+      },
+    });
 
     // Aggregate by type
     let shortTermGains = 0;
@@ -532,17 +721,24 @@ export class VerityAutoTaxEngine extends EventEmitter {
     let totalTax = 0;
 
     for (const calc of calculations) {
-      const gainLoss = parseFloat(calc.gainLoss);
-      totalProceeds += parseFloat(calc.proceeds);
-      totalCostBasis += parseFloat(calc.costBasis);
-      totalTax += parseFloat(calc.taxOwed);
+      const gainLoss = calc.gainLoss.toNumber();
+      totalProceeds += calc.proceeds.toNumber();
+      totalCostBasis += calc.costBasis.toNumber();
+      totalTax += calc.taxOwed.toNumber();
 
       if (calc.transactionType === 'CAPITAL_GAIN' || calc.transactionType === 'CAPITAL_LOSS') {
-        // Simplified - would check actual holding period
-        if (gainLoss > 0) {
-          shortTermGains += gainLoss;
+        if (calc.isLongTerm) {
+          if (gainLoss > 0) {
+            longTermGains += gainLoss;
+          } else {
+            longTermLosses += Math.abs(gainLoss);
+          }
         } else {
-          shortTermLosses += Math.abs(gainLoss);
+          if (gainLoss > 0) {
+            shortTermGains += gainLoss;
+          } else {
+            shortTermLosses += Math.abs(gainLoss);
+          }
         }
       } else if (calc.transactionType === 'DIVIDEND_INCOME') {
         dividendIncome += gainLoss;
@@ -620,23 +816,80 @@ export class VerityAutoTaxEngine extends EventEmitter {
   /**
    * Get audit ledger for a user
    */
-  getAuditLedger(userId: string): unknown[] {
-    return this.auditLedger.get(userId) || [];
+  async getAuditLedger(userId: string): Promise<unknown[]> {
+    const profile = await prisma.taxProfile.findUnique({
+      where: { userId },
+    });
+
+    if (!profile) return [];
+
+    const entries = await prisma.taxAuditEntry.findMany({
+      where: { profileId: profile.id },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return entries.map(e => ({
+      type: e.entryType,
+      data: e.data,
+      verificationHash: e.verificationHash,
+      timestamp: e.createdAt,
+    }));
   }
 
   /**
    * Get all transactions for a user
    */
-  getUserTransactions(userId: string): TaxTransaction[] {
-    return this.transactions.get(userId) || [];
+  async getUserTransactions(userId: string): Promise<TaxTransaction[]> {
+    const profile = await prisma.taxProfile.findUnique({
+      where: { userId },
+    });
+
+    if (!profile) return [];
+
+    const transactions = await prisma.taxTransaction.findMany({
+      where: { profileId: profile.id },
+      orderBy: { timestamp: 'desc' },
+    });
+
+    return transactions.map(tx => ({
+      id: tx.id,
+      type: tx.type as TaxTransaction['type'],
+      asset: tx.asset,
+      amount: tx.amount.toString(),
+      pricePerUnit: tx.pricePerUnit.toString(),
+      totalValue: tx.totalValue.toString(),
+      fee: tx.fee?.toString(),
+      timestamp: tx.timestamp,
+      transactionHash: tx.txHash,
+    }));
   }
 
   /**
    * Get cost basis lots for a user's asset
    */
-  getCostBasisLots(userId: string, asset: string): CostBasisLot[] {
-    const key = `${userId}:${asset}`;
-    return this.costBasisLots.get(key) || [];
+  async getCostBasisLots(userId: string, asset: string): Promise<CostBasisLot[]> {
+    const profile = await prisma.taxProfile.findUnique({
+      where: { userId },
+    });
+
+    if (!profile) return [];
+
+    const lots = await prisma.costBasisLot.findMany({
+      where: {
+        profileId: profile.id,
+        asset,
+      },
+      orderBy: { acquiredAt: 'asc' },
+    });
+
+    return lots.map(lot => ({
+      id: lot.id,
+      asset: lot.asset,
+      amount: lot.amount.toString(),
+      costBasis: lot.costBasis.toString(),
+      acquiredAt: lot.acquiredAt,
+      transactionHash: lot.txHash || undefined,
+    }));
   }
 
   /**
@@ -644,8 +897,8 @@ export class VerityAutoTaxEngine extends EventEmitter {
    */
   getMethodologyDocumentation(): Record<string, unknown> {
     return {
-      version: '1.0.0',
-      description: 'Verity Auto-Tax Calculation Methodology',
+      version: '2.0.0',
+      description: 'Verity Auto-Tax Calculation Methodology (PostgreSQL-backed)',
       supportedMethods: ['FIFO', 'LIFO', 'HIFO', 'AVERAGE', 'SPECIFIC_ID'],
       transactionTypes: [
         {
@@ -670,7 +923,8 @@ export class VerityAutoTaxEngine extends EventEmitter {
         },
       ],
       disclaimer: 'Tax calculations are provided for informational purposes only. Consult a tax professional for advice.',
-      transparency: 'All calculations are logged to an immutable audit ledger with verification hashes.',
+      transparency: 'All calculations are logged to a PostgreSQL audit table with verification hashes.',
+      persistence: 'All data is persisted in PostgreSQL for production use.',
     };
   }
 }
