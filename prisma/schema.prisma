@@ -555,6 +555,91 @@ enum BridgeStatus {
 }
 
 // ============================================================
+// SIGNALS PROTOCOL
+// ============================================================
+
+/// Signal type for proof-of-engagement
+enum SignalType {
+  ENDORSEMENT
+  APPRECIATION
+  SUPPORT
+  BOOST
+  TIP
+}
+
+/// Content NFT for linking signals
+model ContentNFT {
+  id              String    @id @default(cuid())
+  
+  tokenId         String    @unique /// XRPL NFToken ID
+  creator         String    /// Creator wallet address
+  contentHash     String    /// Hash of the content
+  contentType     String    /// Type of content (article, video, etc.)
+  uri             String    /// Content URI
+  
+  // Aggregated stats
+  totalSignals    Int       @default(0)
+  totalValue      Decimal   @default(0) @db.Decimal(20, 6) /// Total XRP received
+  
+  // Relations
+  signals         Signal[]
+  
+  // Timestamps
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([creator])
+  @@index([contentHash])
+  @@index([createdAt])
+}
+
+/// Signal - micro-XRP endorsement
+model Signal {
+  id              String      @id @default(cuid())
+  
+  sender          String      /// Sender wallet address
+  recipient       String      /// Recipient wallet address
+  
+  contentNFTId    String?
+  contentNFT      ContentNFT? @relation(fields: [contentNFTId], references: [id])
+  
+  signalType      SignalType
+  amount          Decimal     @db.Decimal(20, 6) /// XRP amount in drops
+  
+  // Transaction reference
+  txHash          String?     /// XRPL transaction hash
+  verificationHash String     /// Verification hash
+  
+  // Timestamps
+  createdAt       DateTime    @default(now())
+
+  @@index([sender])
+  @@index([recipient])
+  @@index([contentNFTId])
+  @@index([createdAt])
+}
+
+/// Reputation score for wallet
+model ReputationScore {
+  id                  String    @id @default(cuid())
+  
+  wallet              String    @unique /// XRPL wallet address
+  
+  totalSignalsReceived Int      @default(0)
+  totalSignalsSent    Int       @default(0)
+  totalXRPReceived    Decimal   @default(0) @db.Decimal(20, 6)
+  totalXRPSent        Decimal   @default(0) @db.Decimal(20, 6)
+  
+  reputationScore     Decimal   @default(0) @db.Decimal(10, 2)
+  rank                Int?
+  
+  lastUpdated         DateTime  @default(now())
+
+  @@index([reputationScore(sort: Desc)])
+  @@index([wallet])
+}
+
+// ============================================================
 // AUDIT LOG
 // ============================================================
 

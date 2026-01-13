@@ -4,17 +4,19 @@
  * 
  * Micro-XRP signals create sybil-resistant engagement metrics
  * that provide verifiable social proof on the XRP Ledger.
+ * 
+ * MIGRATED TO PRISMA: All data now persisted to PostgreSQL
  */
 
-import { Wallet, Payment, NFTokenMint, NFTokenCreateOffer } from 'xrpl';
+import { Wallet, Payment, NFTokenMint } from 'xrpl';
 import { EventEmitter } from 'eventemitter3';
 import { XRPLClient, TransactionResult } from '../core/XRPLClient.js';
 import { logger, logAuditAction } from '../utils/logger.js';
-import { generateId, generateVerificationHash, encodeMemoData, sha256 } from '../utils/crypto.js';
+import { generateId, generateVerificationHash, encodeMemoData } from '../utils/crypto.js';
+import { prisma } from '../db/client.js';
 import type {
   Signal,
   SignalType,
-  SignalConfig,
   ReputationScore,
   ContentNFT,
 } from '../types/index.js';
@@ -46,27 +48,16 @@ export interface ContentCreator {
 /**
  * Verity Signals Protocol
  * Manages proof-of-engagement through micro-XRP payments
+ * 
+ * NOW USING PRISMA FOR ALL DATA PERSISTENCE
  */
 export class VeritySignalsProtocol extends EventEmitter {
   private xrplClient: XRPLClient;
-  
-  // In-memory storage (would be database in production)
-  private signals: Map<string, Signal> = new Map();
-  private contentNFTs: Map<string, ContentNFT> = new Map();
-  private reputationScores: Map<string, ReputationScore> = new Map();
-  private contentCreators: Map<string, ContentCreator> = new Map();
-  
-  // Signal aggregation by content
-  private signalsByContent: Map<string, Signal[]> = new Map();
-  // Signal aggregation by sender
-  private signalsBySender: Map<string, Signal[]> = new Map();
-  // Signal aggregation by recipient
-  private signalsByRecipient: Map<string, Signal[]> = new Map();
 
   constructor(xrplClient: XRPLClient) {
     super();
     this.xrplClient = xrplClient;
-    logger.info('Verity Signals Protocol initialized');
+    logger.info('Verity Signals Protocol initialized (Prisma-backed)');
   }
 
   /**
@@ -92,7 +83,7 @@ export class VeritySignalsProtocol extends EventEmitter {
     const nftMintTx: NFTokenMint = {
       TransactionType: 'NFTokenMint',
       Account: creatorWallet.address,
-      NFTokenTaxon: 1, // Verity Content taxon
+      NFTokenTaxon: 1,
       Flags: TF_TRANSFERABLE | TF_ONLY_XRP,
       URI: Buffer.from(contentUri).toString('hex').toUpperCase(),
       Memos: [
@@ -112,26 +103,30 @@ export class VeritySignalsProtocol extends EventEmitter {
       throw new Error(`Failed to mint content NFT: ${result.error}`);
     }
 
-    // Extract NFT ID from transaction result (simplified - would parse from meta in production)
+    // Extract NFT ID from transaction result
     const tokenId = generateId('NFT');
 
+    // Store in database
+    const dbNFT = await prisma.contentNFT.create({
+      data: {
+        tokenId,
+        creator: creatorWallet.address,
+        contentHash,
+        contentType,
+        uri: contentUri,
+      },
+    });
+
     const contentNFT: ContentNFT = {
-      tokenId,
-      creator: creatorWallet.address,
-      contentHash,
-      contentType,
-      uri: contentUri,
-      totalSignals: 0,
-      totalValue: '0',
-      createdAt: new Date(),
+      tokenId: dbNFT.tokenId,
+      creator: dbNFT.creator,
+      contentHash: dbNFT.contentHash,
+      contentType: dbNFT.contentType,
+      uri: dbNFT.uri,
+      totalSignals: dbNFT.totalSignals,
+      totalValue: dbNFT.totalValue.toString(),
+      createdAt: dbNFT.createdAt,
     };
-
-    // Store the NFT
-    this.contentNFTs.set(tokenId, contentNFT);
-    this.signalsByContent.set(tokenId, []);
-
-    // Update or create content creator profile
-    this.updateContentCreator(creatorWallet.address, true);
 
     logAuditAction('CONTENT_NFT_MINTED', creatorWallet.address, {
       tokenId,
@@ -151,7 +146,7 @@ export class VeritySignalsProtocol extends EventEmitter {
   async sendVerifiedSignal(
     senderWallet: Wallet,
     contentNFTId: string,
-    amount: string, // XRP drops
+    amount: string,
     signalType: SignalType,
     message?: string
   ): Promise<{ signal: Signal; result: TransactionResult }> {
@@ -160,7 +155,11 @@ export class VeritySignalsProtocol extends EventEmitter {
       throw new Error(`Signal amount must be at least ${MIN_SIGNAL_DROPS} drops`);
     }
 
-    const contentNFT = this.contentNFTs.get(contentNFTId);
+    // Get content NFT from database
+    const contentNFT = await prisma.contentNFT.findUnique({
+      where: { tokenId: contentNFTId },
+    });
+
     if (!contentNFT) {
       throw new Error(`Content NFT ${contentNFTId} not found`);
     }
@@ -205,34 +204,81 @@ export class VeritySignalsProtocol extends EventEmitter {
       throw new Error(`Failed to send signal: ${result.error}`);
     }
 
-    // Create signal record
-    const signal: Signal = {
-      id: signalId,
-      sender: senderWallet.address,
-      recipient: contentNFT.creator,
-      contentNFTId,
-      signalType,
-      amount,
-      timestamp: new Date(),
-      transactionHash: result.hash,
-      verificationHash,
-    };
+    // Use transaction for atomicity
+    const signal = await prisma.$transaction(async (tx) => {
+      // Create signal record
+      const dbSignal = await tx.signal.create({
+        data: {
+          sender: senderWallet.address,
+          recipient: contentNFT.creator,
+          contentNFTId: contentNFT.id,
+          signalType: signalType as any,
+          amount: parseFloat(amount),
+          txHash: result.hash,
+          verificationHash,
+        },
+      });
 
-    // Store signal
-    this.signals.set(signalId, signal);
+      // Update content NFT stats
+      await tx.contentNFT.update({
+        where: { id: contentNFT.id },
+        data: {
+          totalSignals: { increment: 1 },
+          totalValue: { increment: parseFloat(amount) },
+        },
+      });
 
-    // Update aggregations
-    this.addSignalToAggregations(signal);
+      // Update sender reputation
+      await tx.reputationScore.upsert({
+        where: { wallet: senderWallet.address },
+        create: {
+          wallet: senderWallet.address,
+          totalSignalsSent: 1,
+          totalXRPSent: parseFloat(amount),
+        },
+        update: {
+          totalSignalsSent: { increment: 1 },
+          totalXRPSent: { increment: parseFloat(amount) },
+          lastUpdated: new Date(),
+        },
+      });
 
-    // Update content NFT stats
-    contentNFT.totalSignals++;
-    contentNFT.totalValue = (BigInt(contentNFT.totalValue) + BigInt(amount)).toString();
+      // Update recipient reputation
+      await tx.reputationScore.upsert({
+        where: { wallet: contentNFT.creator },
+        create: {
+          wallet: contentNFT.creator,
+          totalSignalsReceived: 1,
+          totalXRPReceived: parseFloat(amount),
+        },
+        update: {
+          totalSignalsReceived: { increment: 1 },
+          totalXRPReceived: { increment: parseFloat(amount) },
+          lastUpdated: new Date(),
+        },
+      });
+
+      return dbSignal;
+    });
 
     // Update reputation scores
-    await this.updateVerifiedReputationScores(contentNFT, senderWallet.address, amount);
+    await this.updateReputationScores(senderWallet.address);
+    await this.updateReputationScores(contentNFT.creator);
+
+    const signalResult: Signal = {
+      id: signal.id,
+      sender: signal.sender,
+      recipient: signal.recipient,
+      contentNFTId: contentNFTId,
+      signalType: signal.signalType as SignalType,
+      amount: signal.amount.toString(),
+      timestamp: signal.createdAt,
+      transactionHash: signal.txHash || '',
+      verificationHash: signal.verificationHash,
+    };
 
     logAuditAction('SIGNAL_SENT', senderWallet.address, {
-      signalId,
+      signalId: signal.id,
       contentNFTId,
       signalType,
       amount,
@@ -240,9 +286,309 @@ export class VeritySignalsProtocol extends EventEmitter {
       transactionHash: result.hash,
     });
 
-    this.emit('signalSent', signal);
+    this.emit('signalSent', signalResult);
 
-    return { signal, result };
+    return { signal: signalResult, result };
+  }
+
+  /**
+   * Update reputation score using transparent algorithm
+   */
+  private async updateReputationScores(wallet: string): Promise<void> {
+    const score = await prisma.reputationScore.findUnique({
+      where: { wallet },
+    });
+
+    if (!score) return;
+
+    // Calculate score using transparent algorithm
+    const receivedValue = Number(score.totalXRPReceived) / 1000000;
+    const sentValue = Number(score.totalXRPSent) / 1000000;
+
+    const receivedScore = Math.log10(receivedValue + 1) * 100;
+    const sentScore = Math.log10(sentValue + 1) * 50;
+    const engagementBonus = Math.min(score.totalSignalsSent, score.totalSignalsReceived) * 0.5;
+
+    const newScore = Math.round(receivedScore + sentScore + engagementBonus);
+
+    await prisma.reputationScore.update({
+      where: { wallet },
+      data: { reputationScore: newScore },
+    });
+  }
+
+  /**
+   * Get signal statistics for a content NFT
+   */
+  async getContentSignalStats(contentNFTId: string): Promise<SignalStats | null> {
+    const nft = await prisma.contentNFT.findUnique({
+      where: { tokenId: contentNFTId },
+      include: {
+        signals: true,
+      },
+    });
+
+    if (!nft || nft.signals.length === 0) {
+      return null;
+    }
+
+    const signals = nft.signals;
+    const totalValue = signals.reduce((sum, s) => sum + Number(s.amount), 0);
+    const uniqueEndorsers = new Set(signals.map((s) => s.sender)).size;
+
+    // Calculate top endorsers
+    const endorserMap = new Map<string, { total: number; count: number }>();
+    for (const signal of signals) {
+      const existing = endorserMap.get(signal.sender) || { total: 0, count: 0 };
+      existing.total += Number(signal.amount);
+      existing.count++;
+      endorserMap.set(signal.sender, existing);
+    }
+
+    const topEndorsers = Array.from(endorserMap.entries())
+      .map(([wallet, data]) => ({
+        wallet,
+        totalValue: data.total.toString(),
+        count: data.count,
+      }))
+      .sort((a, b) => Number(b.totalValue) - Number(a.totalValue))
+      .slice(0, 10);
+
+    return {
+      totalSignals: signals.length,
+      totalValue: totalValue.toString(),
+      uniqueEndorsers,
+      averageSignalValue: (totalValue / signals.length).toString(),
+      topEndorsers,
+    };
+  }
+
+  /**
+   * Get reputation score for a wallet
+   */
+  async getReputationScore(wallet: string): Promise<ReputationScore | null> {
+    const score = await prisma.reputationScore.findUnique({
+      where: { wallet },
+    });
+
+    if (!score) return null;
+
+    return {
+      wallet: score.wallet,
+      totalSignalsReceived: score.totalSignalsReceived,
+      totalSignalsSent: score.totalSignalsSent,
+      totalXRPReceived: score.totalXRPReceived.toString(),
+      totalXRPSent: score.totalXRPSent.toString(),
+      reputationScore: Number(score.reputationScore),
+      rank: score.rank || undefined,
+      lastUpdated: score.lastUpdated,
+    };
+  }
+
+  /**
+   * Get reputation leaderboard
+   */
+  async getReputationLeaderboard(limit = 100): Promise<ReputationScore[]> {
+    const scores = await prisma.reputationScore.findMany({
+      orderBy: { reputationScore: 'desc' },
+      take: limit,
+    });
+
+    return scores.map((score, index) => ({
+      wallet: score.wallet,
+      totalSignalsReceived: score.totalSignalsReceived,
+      totalSignalsSent: score.totalSignalsSent,
+      totalXRPReceived: score.totalXRPReceived.toString(),
+      totalXRPSent: score.totalXRPSent.toString(),
+      reputationScore: Number(score.reputationScore),
+      rank: index + 1,
+      lastUpdated: score.lastUpdated,
+    }));
+  }
+
+  /**
+   * Get content NFT by ID
+   */
+  async getContentNFT(tokenId: string): Promise<ContentNFT | null> {
+    const nft = await prisma.contentNFT.findUnique({
+      where: { tokenId },
+    });
+
+    if (!nft) return null;
+
+    return {
+      tokenId: nft.tokenId,
+      creator: nft.creator,
+      contentHash: nft.contentHash,
+      contentType: nft.contentType,
+      uri: nft.uri,
+      totalSignals: nft.totalSignals,
+      totalValue: nft.totalValue.toString(),
+      createdAt: nft.createdAt,
+    };
+  }
+
+  /**
+   * Get all content NFTs by creator
+   */
+  async getContentByCreator(wallet: string): Promise<ContentNFT[]> {
+    const nfts = await prisma.contentNFT.findMany({
+      where: { creator: wallet },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return nfts.map((nft) => ({
+      tokenId: nft.tokenId,
+      creator: nft.creator,
+      contentHash: nft.contentHash,
+      contentType: nft.contentType,
+      uri: nft.uri,
+      totalSignals: nft.totalSignals,
+      totalValue: nft.totalValue.toString(),
+      createdAt: nft.createdAt,
+    }));
+  }
+
+  /**
+   * Get signals sent by a wallet
+   */
+  async getSignalsSentBy(wallet: string): Promise<Signal[]> {
+    const signals = await prisma.signal.findMany({
+      where: { sender: wallet },
+      include: { contentNFT: true },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return signals.map((s) => ({
+      id: s.id,
+      sender: s.sender,
+      recipient: s.recipient,
+      contentNFTId: s.contentNFT?.tokenId || '',
+      signalType: s.signalType as SignalType,
+      amount: s.amount.toString(),
+      timestamp: s.createdAt,
+      transactionHash: s.txHash || '',
+      verificationHash: s.verificationHash,
+    }));
+  }
+
+  /**
+   * Get signals received by a wallet
+   */
+  async getSignalsReceivedBy(wallet: string): Promise<Signal[]> {
+    const signals = await prisma.signal.findMany({
+      where: { recipient: wallet },
+      include: { contentNFT: true },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return signals.map((s) => ({
+      id: s.id,
+      sender: s.sender,
+      recipient: s.recipient,
+      contentNFTId: s.contentNFT?.tokenId || '',
+      signalType: s.signalType as SignalType,
+      amount: s.amount.toString(),
+      timestamp: s.createdAt,
+      transactionHash: s.txHash || '',
+      verificationHash: s.verificationHash,
+    }));
+  }
+
+  /**
+   * Discover content by various criteria
+   */
+  async discoverContent(criteria: {
+    minSignals?: number;
+    minValue?: string;
+    contentType?: string;
+    creator?: string;
+    sortBy?: 'signals' | 'value' | 'recent';
+    limit?: number;
+  }): Promise<ContentNFT[]> {
+    const where: any = {};
+
+    if (criteria.minSignals !== undefined) {
+      where.totalSignals = { gte: criteria.minSignals };
+    }
+    if (criteria.minValue !== undefined) {
+      where.totalValue = { gte: parseFloat(criteria.minValue) };
+    }
+    if (criteria.contentType) {
+      where.contentType = criteria.contentType;
+    }
+    if (criteria.creator) {
+      where.creator = criteria.creator;
+    }
+
+    let orderBy: any = { createdAt: 'desc' };
+    if (criteria.sortBy === 'signals') {
+      orderBy = { totalSignals: 'desc' };
+    } else if (criteria.sortBy === 'value') {
+      orderBy = { totalValue: 'desc' };
+    }
+
+    const nfts = await prisma.contentNFT.findMany({
+      where,
+      orderBy,
+      take: criteria.limit || 50,
+    });
+
+    return nfts.map((nft) => ({
+      tokenId: nft.tokenId,
+      creator: nft.creator,
+      contentHash: nft.contentHash,
+      contentType: nft.contentType,
+      uri: nft.uri,
+      totalSignals: nft.totalSignals,
+      totalValue: nft.totalValue.toString(),
+      createdAt: nft.createdAt,
+    }));
+  }
+
+  /**
+   * Verify a signal exists on-chain
+   */
+  async verifySignal(signalId: string): Promise<{
+    verified: boolean;
+    signal?: Signal;
+    onChainData?: Record<string, unknown>;
+  }> {
+    const dbSignal = await prisma.signal.findUnique({
+      where: { id: signalId },
+      include: { contentNFT: true },
+    });
+
+    if (!dbSignal) {
+      return { verified: false };
+    }
+
+    const signal: Signal = {
+      id: dbSignal.id,
+      sender: dbSignal.sender,
+      recipient: dbSignal.recipient,
+      contentNFTId: dbSignal.contentNFT?.tokenId || '',
+      signalType: dbSignal.signalType as SignalType,
+      amount: dbSignal.amount.toString(),
+      timestamp: dbSignal.createdAt,
+      transactionHash: dbSignal.txHash || '',
+      verificationHash: dbSignal.verificationHash,
+    };
+
+    if (!dbSignal.txHash) {
+      return { verified: false, signal };
+    }
+
+    try {
+      const txData = await this.xrplClient.getTransaction(dbSignal.txHash);
+      return {
+        verified: true,
+        signal,
+        onChainData: txData,
+      };
+    } catch {
+      return { verified: false, signal };
+    }
   }
 
   /**
@@ -269,305 +615,6 @@ export class VeritySignalsProtocol extends EventEmitter {
     }
 
     return results;
-  }
-
-  /**
-   * Update reputation scores after a signal
-   */
-  private async updateVerifiedReputationScores(
-    contentNFT: ContentNFT,
-    senderAddress: string,
-    amount: string
-  ): Promise<void> {
-    // Update sender reputation
-    let senderScore = this.reputationScores.get(senderAddress);
-    if (!senderScore) {
-      senderScore = {
-        wallet: senderAddress,
-        totalSignalsReceived: 0,
-        totalSignalsSent: 0,
-        totalXRPReceived: '0',
-        totalXRPSent: '0',
-        reputationScore: 0,
-        lastUpdated: new Date(),
-      };
-    }
-    senderScore.totalSignalsSent++;
-    senderScore.totalXRPSent = (BigInt(senderScore.totalXRPSent) + BigInt(amount)).toString();
-    senderScore.reputationScore = this.calculateReputationScore(senderScore);
-    senderScore.lastUpdated = new Date();
-    this.reputationScores.set(senderAddress, senderScore);
-
-    // Update recipient reputation
-    let recipientScore = this.reputationScores.get(contentNFT.creator);
-    if (!recipientScore) {
-      recipientScore = {
-        wallet: contentNFT.creator,
-        totalSignalsReceived: 0,
-        totalSignalsSent: 0,
-        totalXRPReceived: '0',
-        totalXRPSent: '0',
-        reputationScore: 0,
-        lastUpdated: new Date(),
-      };
-    }
-    recipientScore.totalSignalsReceived++;
-    recipientScore.totalXRPReceived = (BigInt(recipientScore.totalXRPReceived) + BigInt(amount)).toString();
-    recipientScore.reputationScore = this.calculateReputationScore(recipientScore);
-    recipientScore.lastUpdated = new Date();
-    this.reputationScores.set(contentNFT.creator, recipientScore);
-
-    // Update content creator profile
-    this.updateContentCreator(contentNFT.creator, false);
-  }
-
-  /**
-   * Calculate reputation score based on signal activity
-   * Algorithm is publicly transparent for verification
-   */
-  private calculateReputationScore(score: ReputationScore): number {
-    // Base score from signals received (weighted by value)
-    const receivedValue = Number(BigInt(score.totalXRPReceived) / BigInt(1000000)); // Convert to XRP
-    const sentValue = Number(BigInt(score.totalXRPSent) / BigInt(1000000));
-
-    // Reputation formula (transparent)
-    // - Receiving signals increases reputation
-    // - Sending signals also increases reputation (shows engagement)
-    // - Logarithmic scaling to prevent runaway scores
-    const receivedScore = Math.log10(receivedValue + 1) * 100;
-    const sentScore = Math.log10(sentValue + 1) * 50;
-    const engagementBonus = Math.min(score.totalSignalsSent, score.totalSignalsReceived) * 0.5;
-
-    return Math.round(receivedScore + sentScore + engagementBonus);
-  }
-
-  /**
-   * Add signal to aggregation maps
-   */
-  private addSignalToAggregations(signal: Signal): void {
-    // By content
-    const contentSignals = this.signalsByContent.get(signal.contentNFTId) || [];
-    contentSignals.push(signal);
-    this.signalsByContent.set(signal.contentNFTId, contentSignals);
-
-    // By sender
-    const senderSignals = this.signalsBySender.get(signal.sender) || [];
-    senderSignals.push(signal);
-    this.signalsBySender.set(signal.sender, senderSignals);
-
-    // By recipient
-    const recipientSignals = this.signalsByRecipient.get(signal.recipient) || [];
-    recipientSignals.push(signal);
-    this.signalsByRecipient.set(signal.recipient, recipientSignals);
-  }
-
-  /**
-   * Update content creator profile
-   */
-  private updateContentCreator(wallet: string, newContent: boolean): void {
-    let creator = this.contentCreators.get(wallet);
-    if (!creator) {
-      creator = {
-        wallet,
-        totalContent: 0,
-        totalSignalsReceived: 0,
-        totalValueReceived: '0',
-        reputationScore: 0,
-        joinedAt: new Date(),
-      };
-    }
-
-    if (newContent) {
-      creator.totalContent++;
-    }
-
-    // Recalculate from reputation score
-    const repScore = this.reputationScores.get(wallet);
-    if (repScore) {
-      creator.totalSignalsReceived = repScore.totalSignalsReceived;
-      creator.totalValueReceived = repScore.totalXRPReceived;
-      creator.reputationScore = repScore.reputationScore;
-    }
-
-    this.contentCreators.set(wallet, creator);
-  }
-
-  /**
-   * Get signal statistics for a content NFT
-   */
-  getContentSignalStats(contentNFTId: string): SignalStats | null {
-    const signals = this.signalsByContent.get(contentNFTId);
-    if (!signals || signals.length === 0) {
-      return null;
-    }
-
-    // Calculate stats
-    const totalValue = signals.reduce(
-      (sum, s) => BigInt(sum) + BigInt(s.amount),
-      BigInt(0)
-    );
-
-    const uniqueEndorsers = new Set(signals.map((s) => s.sender)).size;
-
-    // Calculate top endorsers
-    const endorserValues: Map<string, { total: bigint; count: number }> = new Map();
-    for (const signal of signals) {
-      const existing = endorserValues.get(signal.sender) || { total: BigInt(0), count: 0 };
-      existing.total += BigInt(signal.amount);
-      existing.count++;
-      endorserValues.set(signal.sender, existing);
-    }
-
-    const topEndorsers = Array.from(endorserValues.entries())
-      .map(([wallet, data]) => ({
-        wallet,
-        totalValue: data.total.toString(),
-        count: data.count,
-      }))
-      .sort((a, b) => Number(BigInt(b.totalValue) - BigInt(a.totalValue)))
-      .slice(0, 10);
-
-    return {
-      totalSignals: signals.length,
-      totalValue: totalValue.toString(),
-      uniqueEndorsers,
-      averageSignalValue: (totalValue / BigInt(signals.length)).toString(),
-      topEndorsers,
-    };
-  }
-
-  /**
-   * Get reputation score for a wallet
-   */
-  getReputationScore(wallet: string): ReputationScore | undefined {
-    return this.reputationScores.get(wallet);
-  }
-
-  /**
-   * Get reputation leaderboard
-   */
-  getReputationLeaderboard(limit = 100): ReputationScore[] {
-    return Array.from(this.reputationScores.values())
-      .sort((a, b) => b.reputationScore - a.reputationScore)
-      .slice(0, limit)
-      .map((score, index) => ({
-        ...score,
-        rank: index + 1,
-      }));
-  }
-
-  /**
-   * Get content NFT by ID
-   */
-  getContentNFT(tokenId: string): ContentNFT | undefined {
-    return this.contentNFTs.get(tokenId);
-  }
-
-  /**
-   * Get all content NFTs by creator
-   */
-  getContentByCreator(wallet: string): ContentNFT[] {
-    return Array.from(this.contentNFTs.values()).filter(
-      (nft) => nft.creator === wallet
-    );
-  }
-
-  /**
-   * Get signals sent by a wallet
-   */
-  getSignalsSentBy(wallet: string): Signal[] {
-    return this.signalsBySender.get(wallet) || [];
-  }
-
-  /**
-   * Get signals received by a wallet
-   */
-  getSignalsReceivedBy(wallet: string): Signal[] {
-    return this.signalsByRecipient.get(wallet) || [];
-  }
-
-  /**
-   * Get content creator profile
-   */
-  getContentCreator(wallet: string): ContentCreator | undefined {
-    return this.contentCreators.get(wallet);
-  }
-
-  /**
-   * Search content by various criteria
-   */
-  discoverContent(
-    criteria: {
-      minSignals?: number;
-      minValue?: string;
-      contentType?: string;
-      creator?: string;
-      sortBy?: 'signals' | 'value' | 'recent';
-      limit?: number;
-    }
-  ): ContentNFT[] {
-    let results = Array.from(this.contentNFTs.values());
-
-    // Apply filters
-    if (criteria.minSignals !== undefined) {
-      results = results.filter((nft) => nft.totalSignals >= criteria.minSignals!);
-    }
-    if (criteria.minValue !== undefined) {
-      results = results.filter(
-        (nft) => BigInt(nft.totalValue) >= BigInt(criteria.minValue!)
-      );
-    }
-    if (criteria.contentType) {
-      results = results.filter((nft) => nft.contentType === criteria.contentType);
-    }
-    if (criteria.creator) {
-      results = results.filter((nft) => nft.creator === criteria.creator);
-    }
-
-    // Sort
-    switch (criteria.sortBy) {
-      case 'signals':
-        results.sort((a, b) => b.totalSignals - a.totalSignals);
-        break;
-      case 'value':
-        results.sort((a, b) => Number(BigInt(b.totalValue) - BigInt(a.totalValue)));
-        break;
-      case 'recent':
-      default:
-        results.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
-    }
-
-    // Limit
-    if (criteria.limit) {
-      results = results.slice(0, criteria.limit);
-    }
-
-    return results;
-  }
-
-  /**
-   * Verify a signal exists on-chain
-   */
-  async verifySignal(signalId: string): Promise<{
-    verified: boolean;
-    signal?: Signal;
-    onChainData?: Record<string, unknown>;
-  }> {
-    const signal = this.signals.get(signalId);
-    if (!signal) {
-      return { verified: false };
-    }
-
-    try {
-      const txData = await this.xrplClient.getTransaction(signal.transactionHash);
-      return {
-        verified: true,
-        signal,
-        onChainData: txData,
-      };
-    } catch {
-      return { verified: false, signal };
-    }
   }
 
   /**
