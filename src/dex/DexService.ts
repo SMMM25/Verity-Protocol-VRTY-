@@ -15,21 +15,9 @@ import {
   OfferResult,
   ActiveOffer,
   MarketStats,
-  TradeRecord,
 } from './types.js';
 import { logger } from '../utils/logger.js';
-
-// Using shared logger
-
-// ============================================================
-// CONSTANTS
-// ============================================================
-
-const XRPL_ENDPOINTS = {
-  mainnet: 'wss://xrplcluster.com',
-  testnet: 'wss://s.altnet.rippletest.net:51233',
-  devnet: 'wss://s.devnet.rippletest.net:51233',
-};
+import { XRPL_ENDPOINTS, XRPLNetwork, safeDivide } from '../config/xrpl.js';
 
 // ============================================================
 // DEX SERVICE CLASS
@@ -37,9 +25,9 @@ const XRPL_ENDPOINTS = {
 
 export class DexService {
   private client: Client | null = null;
-  private network: 'mainnet' | 'testnet' | 'devnet';
+  private network: XRPLNetwork;
 
-  constructor(network: 'mainnet' | 'testnet' | 'devnet' = 'mainnet') {
+  constructor(network: XRPLNetwork = 'mainnet') {
     this.network = network;
   }
 
@@ -157,7 +145,8 @@ export class DexService {
           ? parseFloat(offer.TakerGets.value)
           : dropsToXrp(offer.TakerGets || 0);
 
-        price = xrpAmount / vrtyAmount;
+        // BUG-003 FIX: Safe division to prevent NaN/Infinity
+        price = safeDivide(xrpAmount, vrtyAmount, 0);
         amount = vrtyAmount.toString();
         total = xrpAmount.toString();
       } else {
@@ -170,7 +159,8 @@ export class DexService {
           ? parseFloat(offer.TakerGets.value)
           : dropsToXrp(offer.TakerGets || 0);
 
-        price = xrpAmount / vrtyAmount;
+        // BUG-003 FIX: Safe division to prevent NaN/Infinity
+        price = safeDivide(xrpAmount, vrtyAmount, 0);
         amount = vrtyAmount.toString();
         total = xrpAmount.toString();
       }
@@ -462,7 +452,7 @@ export class DexService {
 
 let dexService: DexService | null = null;
 
-export function getDexService(network?: 'mainnet' | 'testnet' | 'devnet'): DexService {
+export function getDexService(network?: XRPLNetwork): DexService {
   if (!dexService) {
     dexService = new DexService(network);
   }

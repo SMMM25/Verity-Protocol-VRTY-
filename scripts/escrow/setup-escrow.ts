@@ -22,16 +22,22 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as readline from 'readline';
 
-// Import escrow service
-import { EscrowService, getEscrowService } from '../../src/escrow/EscrowService.js';
-import { EscrowConfig, ReleaseSchedule } from '../../src/escrow/types.js';
+// Import from correct modules (Fixed BUG-001)
+import { 
+  TokenDistributionService, 
+  getTokenDistributionService 
+} from '../../src/escrow/TokenDistributionService.js';
+import { 
+  DistributionConfig, 
+  ReleaseSchedule 
+} from '../../src/escrow/distributionTypes.js';
 
 // ============================================================
 // CONFIGURATION
 // ============================================================
 
-const CONFIG: Partial<EscrowConfig> = {
-  network: (process.env['XRPL_NETWORK'] as any) || 'mainnet',
+const CONFIG: Partial<DistributionConfig> = {
+  network: (process.env['XRPL_NETWORK'] as 'mainnet' | 'testnet' | 'devnet') || 'mainnet',
   issuerAddress: process.env['VRTY_ISSUER_ADDRESS'] || 'rBeHfq9vRjZ8Cth1sMbp2nJvExmxSxAH8f',
   currencyCode: 'VRTY',
   totalAmount: '1000000000', // 1 billion
@@ -89,7 +95,7 @@ async function generateSchedule(): Promise<void> {
   console.log('  VRTY ESCROW RELEASE SCHEDULE GENERATOR');
   console.log('='.repeat(60) + '\n');
 
-  const service = getEscrowService(CONFIG);
+  const service = getTokenDistributionService(CONFIG);
   const schedule = service.generateReleaseSchedule();
 
   console.log('📋 Configuration:');
@@ -160,7 +166,7 @@ async function verifySetup(): Promise<void> {
   console.log('  VRTY ESCROW VERIFICATION');
   console.log('='.repeat(60) + '\n');
 
-  const service = getEscrowService(CONFIG);
+  const service = getTokenDistributionService(CONFIG);
 
   console.log('🔗 Connecting to XRPL...');
   await service.connect();
@@ -177,13 +183,13 @@ async function verifySetup(): Promise<void> {
     console.log(`\n   Distribution (${CONFIG.releaseDestination})`);
     console.log(`   VRTY Balance: ${formatNumber(distributionBalance)}`);
 
-    // Check escrow status
-    const status = await service.getEscrowStatus();
-    console.log('\n📋 Escrow Status:');
-    console.log(`   Total Escrows: ${status.totalEscrows}`);
-    console.log(`   Pending: ${status.pendingEscrows}`);
-    console.log(`   Released: ${status.releasedEscrows}`);
-    console.log(`   In Escrow: ${formatNumber(status.totalInEscrow)} VRTY`);
+    // Check distribution status
+    const status = await service.getDistributionStatus();
+    console.log('\n📋 Distribution Status:');
+    console.log(`   Total Scheduled: ${status.totalScheduled}`);
+    console.log(`   Pending: ${status.pendingReleases}`);
+    console.log(`   Released: ${status.releasedCount}`);
+    console.log(`   In Schedule: ${formatNumber(status.totalInSchedule)} VRTY`);
     console.log(`   Released: ${formatNumber(status.totalReleased)} VRTY`);
 
     if (status.nextRelease) {
@@ -205,7 +211,7 @@ async function showStatus(): Promise<void> {
   console.log('  VRTY ESCROW STATUS');
   console.log('='.repeat(60) + '\n');
 
-  const service = getEscrowService(CONFIG);
+  const service = getTokenDistributionService(CONFIG);
   const data = service.getPublicEscrowData();
 
   console.log('📊 Token Distribution:');
@@ -247,7 +253,7 @@ async function exportSchedule(): Promise<void> {
 
   ensureOutputDir();
 
-  const service = getEscrowService(CONFIG);
+  const service = getTokenDistributionService(CONFIG);
   const data = service.getPublicEscrowData();
 
   // Export release schedule
@@ -274,7 +280,7 @@ async function exportSchedule(): Promise<void> {
       distribution: CONFIG.releaseDestination,
     },
     phases: [
-      { months: '1-12', percentPerMonth: '1.5%', totalPercent: '18%' },
+      { months: '1-12', percentPerMonth: '1.5%', totalPercent: '15%' },
       { months: '13-24', percentPerMonth: '2.0%', totalPercent: '24%' },
       { months: '25-36', percentPerMonth: '2.0%', totalPercent: '24%' },
       { months: '37-48', percentPerMonth: '2.5%', totalPercent: '30%' },
