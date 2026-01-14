@@ -61,6 +61,8 @@ keystore/
 
 # Solana keys - CRITICAL: Never commit these!
 solana/keys/*.json
+solana/keys/**/*.json
+!solana/keys/**/.gitkeep
 *.keypair
 *-authority.json
 *-validator*.json
