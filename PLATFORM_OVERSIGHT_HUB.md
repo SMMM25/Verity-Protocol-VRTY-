@@ -30,6 +30,7 @@ This document establishes **binding rules** for all human developers, AI develop
 6. [Dashboard Status Tracker](#dashboard-status-tracker)
 7. [Work Log Requirements](#work-log-requirements)
 8. [AI Platform Specific Rules](#ai-platform-specific-rules)
+9. [Next Steps Rule](#next-steps-rule)
 
 ---
 
@@ -299,6 +300,7 @@ docs(hub): Update Platform Oversight Hub with new rules
 | 4 | Signals Dashboard | `/app/signals` | ✅ COMPLETE | 100% | 2026-01-14 |
 | 5 | Tokenized Assets | `/app/assets` | ✅ COMPLETE | 100% | 2026-01-14 |
 | 6 | AI Sentinel | `/app/sentinel` | ✅ COMPLETE | 100% | 2026-01-14 |
+| 7 | Cross-Chain Bridge | `/app/bridge` | ✅ COMPLETE | 100% | 2026-01-14 |
 
 ### Feature Implementation Status
 
@@ -310,7 +312,7 @@ docs(hub): Update Platform Oversight Hub with new rules
 | Signals Protocol | 95% | 100% | 90% | 🟢 Active |
 | Asset Tokenization | 85% | 100% | 80% | 🟢 Active |
 | AI Sentinel | 90% | 100% | 80% | 🟢 Active |
-| Cross-Chain Bridge | 60% | 0% | 0% | 🟡 In Progress |
+| Cross-Chain Bridge | 60% | 100% | 60% | 🟢 Active |
 
 ---
 
@@ -449,3 +451,104 @@ If you notice violations of these rules:
 **BY WORKING ON THIS CODEBASE, YOU AGREE TO FOLLOW ALL RULES IN THIS DOCUMENT.**
 
 *Last enforced review: 2026-01-14*
+
+---
+
+## 📌 NEXT STEPS RULE
+
+> **MANDATORY: Upon completing any assignment, the developer or AI MUST provide a "Next Steps" recommendation.**
+
+### Purpose
+This rule ensures continuity and helps the team/developers know exactly where the last person left off, what remains to be done, and what the recommended priority is.
+
+### When to Apply
+This rule applies after completing:
+- Any dashboard or feature implementation
+- Bug fixes affecting multiple components
+- Major refactoring work
+- API integrations
+- Any phase milestone
+
+### Required Format
+
+```markdown
+## 📌 NEXT STEPS RECOMMENDATION
+
+**Completed**: [Brief description of what was just completed]
+**Date**: [Date]
+**Contributor**: [Name or AI Platform]
+
+### Recommended Next Actions (in priority order):
+
+1. **[Priority 1 Task]**
+   - Current status: [percentage complete or status]
+   - Why: [Brief explanation]
+   - Files/Components: [Relevant files]
+
+2. **[Priority 2 Task]**
+   - Current status: [percentage complete or status]
+   - Why: [Brief explanation]
+   - Files/Components: [Relevant files]
+
+3. **[Priority 3 Task]**
+   - Current status: [percentage complete or status]
+   - Why: [Brief explanation]
+   - Files/Components: [Relevant files]
+
+### Blockers or Dependencies:
+- [Any blockers that need resolution]
+- [Dependencies that must be completed first]
+
+### Notes for Next Developer:
+- [Important context or warnings]
+- [Technical debt to be aware of]
+- [Recommendations for approach]
+```
+
+### Example
+
+```markdown
+## 📌 NEXT STEPS RECOMMENDATION
+
+**Completed**: Phase 7 - Cross-Chain Bridge Dashboard
+**Date**: 2026-01-14
+**Contributor**: Claude (Genspark AI)
+
+### Recommended Next Actions (in priority order):
+
+1. **Backend API Integration for Bridge**
+   - Current status: 60% backend complete
+   - Why: Frontend is complete but needs real API connection
+   - Files/Components: src/api/routes/bridge.ts, src/bridge/
+
+2. **Mobile SDK / React Native App**
+   - Current status: 0%
+   - Why: Mobile access is key for user adoption
+   - Files/Components: To be created in /mobile/
+
+3. **Enterprise Compliance Dashboard**
+   - Current status: 0%
+   - Why: Required for institutional clients
+   - Files/Components: To be created
+
+### Blockers or Dependencies:
+- Bridge backend needs Solana devnet validator signatures
+- Mobile SDK depends on stable API contracts
+
+### Notes for Next Developer:
+- Bridge demo data matches backend response structure exactly
+- All 7 dashboards are complete - focus on backend integration now
+- Consider code-splitting for production bundle optimization
+```
+
+### Location
+Next Steps recommendations should be added to:
+1. `WORK_LOG.md` - At the end of your work log entry
+2. Pull Request description - In a dedicated section
+3. When closing an issue - As a final comment
+
+### Enforcement
+Pull requests that complete significant work WITHOUT a Next Steps recommendation will be:
+1. **First offense**: Requested to add Next Steps before merge
+2. **Second offense**: PR held until Next Steps provided
+3. **Repeated offense**: Contributor reminded of mandatory compliance

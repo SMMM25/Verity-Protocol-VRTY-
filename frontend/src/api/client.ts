@@ -815,4 +815,88 @@ export const sentinelApi = {
     api.get('/sentinel/queue').then(res => res.data),
 };
 
+// ============================================================
+// CROSS-CHAIN BRIDGE API
+// ============================================================
+
+import type {
+  SupportedChainsResponse,
+  SolanaStatus,
+  FeeEstimate,
+  InitiateBridgeRequest,
+  InitiateBridgeResponse,
+  BridgeTransaction,
+  BridgeHistoryResponse,
+  WalletBalance,
+  ValidatorSignatureRequest,
+  ValidatorSignatureResponse,
+  BridgeStatistics,
+  BridgeHealth,
+  BridgeStatus as BridgeStatusType
+} from '../types/bridge';
+
+export const bridgeApi = {
+  // ========== Chain Information ==========
+  
+  // Get supported chains
+  getSupportedChains: (): Promise<SupportedChainsResponse> =>
+    api.get('/bridge/supported-chains').then(res => res.data.data),
+
+  // Get Solana network status
+  getSolanaStatus: (): Promise<SolanaStatus> =>
+    api.get('/bridge/solana/status').then(res => res.data.data),
+
+  // ========== Fee Estimation ==========
+  
+  // Estimate bridge fee
+  estimateFee: (params: {
+    sourceChain?: string;
+    destinationChain: string;
+    amount: string;
+  }): Promise<FeeEstimate> =>
+    api.get('/bridge/estimate-fee', { params }).then(res => res.data.data),
+
+  // ========== Bridge Transactions ==========
+  
+  // Initiate bridge transaction
+  initiateBridge: (data: InitiateBridgeRequest): Promise<InitiateBridgeResponse> =>
+    api.post('/bridge/initiate', data).then(res => res.data.data),
+
+  // Get bridge transaction status
+  getBridgeStatus: (bridgeId: string): Promise<BridgeTransaction> =>
+    api.get(`/bridge/transaction/${bridgeId}`).then(res => res.data.data),
+
+  // Get bridge history for address
+  getBridgeHistory: (address: string, params?: {
+    page?: number;
+    limit?: number;
+    status?: BridgeStatusType;
+  }): Promise<BridgeHistoryResponse> =>
+    api.get(`/bridge/history/${address}`, { params }).then(res => res.data.data),
+
+  // ========== Balances ==========
+  
+  // Get wVRTY balance on Solana
+  getWVRTYBalance: (address: string): Promise<WalletBalance> =>
+    api.get('/bridge/wvrty-balance', { params: { address } }).then(res => res.data.data),
+
+  // ========== Validator Operations ==========
+  
+  // Add validator signature
+  addValidatorSignature: (bridgeId: string, data: ValidatorSignatureRequest): Promise<ValidatorSignatureResponse> =>
+    api.post(`/bridge/transaction/${bridgeId}/validate`, data).then(res => res.data.data),
+
+  // ========== Statistics ==========
+  
+  // Get bridge statistics
+  getStatistics: (): Promise<BridgeStatistics> =>
+    api.get('/bridge/statistics').then(res => res.data.data),
+
+  // ========== Health ==========
+  
+  // Check bridge health
+  checkHealth: (): Promise<BridgeHealth> =>
+    api.get('/bridge/health').then(res => res.data.data),
+};
+
 export default api;

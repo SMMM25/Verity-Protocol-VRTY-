@@ -11,7 +11,8 @@ import {
   Wallet,
   LineChart,
   Landmark,
-  Brain
+  Brain,
+  ArrowRightLeft
 } from 'lucide-react';
 import { useUser } from '../App';
 
@@ -41,6 +42,10 @@ const assetsNavItems = [
 
 const sentinelNavItems = [
   { to: '/app/sentinel', icon: Brain, label: 'AI Sentinel', exact: true },
+];
+
+const bridgeNavItems = [
+  { to: '/app/bridge', icon: ArrowRightLeft, label: 'Cross-Chain Bridge', exact: true },
 ];
 
 export default function Layout() {
@@ -224,6 +229,34 @@ export default function Layout() {
                       `flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${
                         isActive
                           ? 'bg-purple-600 text-white'
+                          : 'text-slate-400 hover:bg-slate-700 hover:text-white'
+                      }`
+                    }
+                  >
+                    <item.icon className="w-5 h-5" />
+                    <span>{item.label}</span>
+                  </NavLink>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          {/* Cross-Chain Bridge Section */}
+          <div className="mb-6">
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">
+              Cross-Chain
+              <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-cyan-600/30 text-cyan-400">NEW</span>
+            </p>
+            <ul className="space-y-1">
+              {bridgeNavItems.map((item) => (
+                <li key={item.to}>
+                  <NavLink
+                    to={item.to}
+                    end={item.exact}
+                    className={({ isActive }) =>
+                      `flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${
+                        isActive
+                          ? 'bg-cyan-600 text-white'
                           : 'text-slate-400 hover:bg-slate-700 hover:text-white'
                       }`
                     }

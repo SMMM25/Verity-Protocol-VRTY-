@@ -13,6 +13,7 @@ import GuildDetail from './pages/GuildDetail';
 import SignalsDashboard from './pages/SignalsDashboard';
 import AssetsDashboard from './pages/AssetsDashboard';
 import SentinelDashboard from './pages/SentinelDashboard';
+import BridgeDashboard from './pages/BridgeDashboard';
 import Landing from './pages/Landing';
 
 const queryClient = new QueryClient({
@@ -94,6 +95,8 @@ function App() {
               <Route path="assets" element={<AssetsDashboard />} />
               {/* AI Sentinel Routes */}
               <Route path="sentinel" element={<SentinelDashboard />} />
+              {/* Cross-Chain Bridge Routes */}
+              <Route path="bridge" element={<BridgeDashboard />} />
             </Route>
           </Routes>
         </BrowserRouter>
