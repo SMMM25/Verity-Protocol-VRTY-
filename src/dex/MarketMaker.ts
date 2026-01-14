@@ -11,13 +11,9 @@ import {
   DEFAULT_MARKET_MAKER_CONFIG,
   MarketMakerStatus,
   ActiveOffer,
-  TradingPair,
-  VRTY_XRP_PAIR,
 } from './types.js';
 import { DexService, getDexService } from './DexService.js';
 import { logger } from '../utils/logger.js';
-
-// Using shared logger
 
 // ============================================================
 // MARKET MAKER CLASS

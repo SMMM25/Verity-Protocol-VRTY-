@@ -23,18 +23,7 @@ import {
   AllocationEntry,
 } from './distributionTypes.js';
 import { logger } from '../utils/logger.js';
-
-// Using shared logger
-
-// ============================================================
-// CONSTANTS
-// ============================================================
-
-const XRPL_ENDPOINTS = {
-  mainnet: 'wss://xrplcluster.com',
-  testnet: 'wss://s.altnet.rippletest.net:51233',
-  devnet: 'wss://s.devnet.rippletest.net:51233',
-};
+import { XRPL_ENDPOINTS, VRTY_CONFIG } from '../config/xrpl.js';
 
 // Release percentages by phase
 const RELEASE_PHASES = [
