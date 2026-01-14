@@ -23,8 +23,8 @@
 
 ### 1.1 Credential Rotation (IMMEDIATE)
 
-- [ ] **Rotate testnet issuer seed** - Current seed `sEdTxCuh1BiCbfJuuY1SLv9f8HBvymi` is compromised
-- [ ] **Rotate testnet distribution seed** - Current seed `sEdSFpKqnyKSByxePuZ9bvhQYEpK9Tm` is compromised
+- [x] **Rotate testnet issuer seed** - COMPROMISED SEED REMOVED FROM REPO - Generate new wallet
+- [x] **Rotate testnet distribution seed** - COMPROMISED SEED REMOVED FROM REPO - Generate new wallet
 - [ ] **Generate new mainnet wallets** - Do NOT reuse any seeds from the repository
 - [ ] **Document new addresses** - Store securely (password manager, not Git)
 

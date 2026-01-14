@@ -95,13 +95,17 @@ The Verity Protocol demonstrates solid XRPL integration fundamentals but has cri
 {
   "network": "testnet",
   "issuerAddress": "rBU2SVSbw6f4GErNtCLs5tuHDZo5SrD55h",
-  "issuerSeed": "sEdTxCuh1BiCbfJuuY1SLv9f8HBvymi",
+  "issuerSeed": "[REDACTED - COMPROMISED - GENERATE NEW]",
   "distributionAddress": "rNihM712XLsDkvMbxfekx3EYWpXvm1Q7R3",
-  "distributionSeed": "sEdSFpKqnyKSByxePuZ9bvhQYEpK9Tm",
+  "distributionSeed": "[REDACTED - COMPROMISED - GENERATE NEW]",
   "currencyCode": "5652545900000000000000000000000000000000",
   "totalSupply": "1000000000"
 }
 ```
+
+> **⚠️ SECURITY UPDATE (2026-01-14):** Seeds have been redacted from this report. 
+> These credentials were compromised and should NEVER be reused. 
+> Generate new wallets for any production deployment.
 
 **Analysis:**
 - File is listed in `.gitignore` (line 48: `.vrty-credentials.json`)
