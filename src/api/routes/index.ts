@@ -17,6 +17,7 @@ import { transparencyRoutes } from './transparency.js';
 import { complianceRoutes } from './compliance.js';
 import { vrtyRoutes } from './vrty.js';
 import { bridgeRoutes } from './bridge.js';
+import { sentinelRoutes } from './sentinel.js';
 import { openAPIRoutes } from '../openapi.js';
 
 const router = Router();
@@ -35,6 +36,7 @@ router.use('/transparency', transparencyRoutes);
 router.use('/compliance', complianceRoutes);
 router.use('/vrty', vrtyRoutes);
 router.use('/bridge', bridgeRoutes);
+router.use('/sentinel', sentinelRoutes);
 
 // OpenAPI/Swagger documentation
 router.use('/', openAPIRoutes);
@@ -58,6 +60,7 @@ router.get('/docs', (req, res) => {
       compliance: '/api/v1/compliance',
       vrty: '/api/v1/vrty',
       bridge: '/api/v1/bridge',
+      sentinel: '/api/v1/sentinel',
       openapi: '/api/v1/openapi.json',
       swagger: '/api/v1/swagger',
     },

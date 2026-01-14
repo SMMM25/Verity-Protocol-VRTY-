@@ -323,6 +323,43 @@ npm run typecheck
 npm run lint
 ```
 
+## 🚀 Production Deployment
+
+### Live URLs
+- **Website**: https://www.verityprotocol.io
+- **API**: https://www.verityprotocol.io/api/v1
+- **Health**: https://www.verityprotocol.io/api/v1/health
+
+### Maintenance Mode
+The site can be locked with an "Under Construction" page.
+
+**To UNLOCK the site (go live):**
+```bash
+# In src/api/middleware/maintenance.ts, change:
+return true;   # Site locked
+# To:
+return false;  # Site unlocked
+
+# Then commit and push:
+git add -A && git commit -m "feat: Unlock site for launch" && git push origin main
+```
+
+**To LOCK the site (maintenance):**
+```bash
+# In src/api/middleware/maintenance.ts, change:
+return false;  # Site unlocked
+# To:
+return true;   # Site locked
+
+# Then commit and push:
+git add -A && git commit -m "feat: Lock site for maintenance" && git push origin main
+```
+
+Railway auto-deploys from GitHub - no manual action needed.
+
+### Railway Dashboard
+- Project: https://railway.com/project/76f5a333-58a6-4825-9153-02306bcdc59c
+
 ## 📜 Configuration
 
 Copy `.env.example` to `.env` and configure:
