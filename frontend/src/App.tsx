@@ -12,6 +12,7 @@ import GuildDashboard from './pages/GuildDashboard';
 import GuildDetail from './pages/GuildDetail';
 import SignalsDashboard from './pages/SignalsDashboard';
 import AssetsDashboard from './pages/AssetsDashboard';
+import SentinelDashboard from './pages/SentinelDashboard';
 import Landing from './pages/Landing';
 
 const queryClient = new QueryClient({
@@ -39,7 +40,7 @@ interface UserContextType {
   user: User | null;
 }
 
-const UserContext = createContext<UserContextType | null>(null);
+export const UserContext = createContext<UserContextType | null>(null);
 
 export const useUser = () => {
   const context = useContext(UserContext);
@@ -91,6 +92,8 @@ function App() {
               <Route path="signals" element={<SignalsDashboard />} />
               {/* Tokenized Assets Routes */}
               <Route path="assets" element={<AssetsDashboard />} />
+              {/* AI Sentinel Routes */}
+              <Route path="sentinel" element={<SentinelDashboard />} />
             </Route>
           </Routes>
         </BrowserRouter>

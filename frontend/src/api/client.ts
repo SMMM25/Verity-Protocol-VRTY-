@@ -617,4 +617,202 @@ export const signalsApi = {
     api.get(`/signals/verify/${signalId}`).then(res => res.data),
 };
 
+// ============================================================
+// AI SENTINEL API
+// ============================================================
+
+import type {
+  AlertFilter,
+  AlertActionRequest,
+  AlertActionResponse,
+  AlertsListResponse,
+  SentinelAlert,
+  SentinelStats,
+  RuleDefinition,
+  RuleUpdateRequest,
+  Guardian,
+  GuardianRegistrationRequest,
+  WalletProfile,
+  SentinelStatusResponse,
+  RealTimeMetrics,
+  ThreatCluster,
+  ClawbackProposal,
+  ClawbackVote
+} from '../types/sentinel';
+
+export const sentinelApi = {
+  // ========== Alerts ==========
+  
+  // Get all alerts with filtering
+  getAlerts: (filter?: AlertFilter): Promise<AlertsListResponse> =>
+    api.get('/sentinel/alerts', { params: filter }).then(res => res.data),
+
+  // Get single alert by ID
+  getAlert: (alertId: string): Promise<SentinelAlert> =>
+    api.get(`/sentinel/alerts/${alertId}`).then(res => res.data),
+
+  // Start review of an alert
+  startReview: (alertId: string, guardianWallet: string): Promise<SentinelAlert> =>
+    api.post(`/sentinel/alerts/${alertId}/review`, { guardianWallet }).then(res => res.data),
+
+  // Process action on an alert
+  processAction: (request: AlertActionRequest): Promise<AlertActionResponse> =>
+    api.post(`/sentinel/alerts/${request.alertId}/action`, request).then(res => res.data),
+
+  // Get alert audit trail
+  getAlertAudit: (alertId: string): Promise<SentinelAlert['auditLog']> =>
+    api.get(`/sentinel/alerts/${alertId}/audit`).then(res => res.data),
+
+  // ========== Rules ==========
+  
+  // Get all rules
+  getRules: (): Promise<RuleDefinition[]> =>
+    api.get('/sentinel/rules').then(res => res.data),
+
+  // Get single rule
+  getRule: (ruleId: string): Promise<RuleDefinition> =>
+    api.get(`/sentinel/rules/${ruleId}`).then(res => res.data),
+
+  // Update rule
+  updateRule: (request: RuleUpdateRequest): Promise<RuleDefinition> =>
+    api.patch(`/sentinel/rules/${request.ruleId}`, request).then(res => res.data),
+
+  // Enable/disable rule
+  setRuleEnabled: (ruleId: string, enabled: boolean): Promise<RuleDefinition> =>
+    api.patch(`/sentinel/rules/${ruleId}/enabled`, { enabled }).then(res => res.data),
+
+  // Create custom rule
+  createRule: (data: Omit<RuleDefinition, 'id' | 'createdAt' | 'updatedAt'>): Promise<RuleDefinition> =>
+    api.post('/sentinel/rules', data).then(res => res.data),
+
+  // Delete rule (custom only)
+  deleteRule: (ruleId: string): Promise<{ success: boolean }> =>
+    api.delete(`/sentinel/rules/${ruleId}`).then(res => res.data),
+
+  // ========== Guardians ==========
+  
+  // Get all guardians
+  getGuardians: (): Promise<Guardian[]> =>
+    api.get('/sentinel/guardians').then(res => res.data),
+
+  // Get single guardian
+  getGuardian: (wallet: string): Promise<Guardian> =>
+    api.get(`/sentinel/guardians/${wallet}`).then(res => res.data),
+
+  // Register new guardian
+  registerGuardian: (data: GuardianRegistrationRequest): Promise<Guardian> =>
+    api.post('/sentinel/guardians', data).then(res => res.data),
+
+  // Update guardian role
+  updateGuardianRole: (wallet: string, role: Guardian['role']): Promise<Guardian> =>
+    api.patch(`/sentinel/guardians/${wallet}/role`, { role }).then(res => res.data),
+
+  // Deactivate guardian
+  deactivateGuardian: (wallet: string): Promise<{ success: boolean }> =>
+    api.post(`/sentinel/guardians/${wallet}/deactivate`).then(res => res.data),
+
+  // Get guardian leaderboard
+  getGuardianLeaderboard: (params?: { limit?: number }): Promise<Array<{ guardian: Guardian; rank: number; score: number }>> =>
+    api.get('/sentinel/guardians/leaderboard', { params }).then(res => res.data),
+
+  // ========== Wallet Profiles ==========
+  
+  // Get wallet risk profile
+  getWalletProfile: (wallet: string): Promise<WalletProfile> =>
+    api.get(`/sentinel/wallets/${wallet}`).then(res => res.data),
+
+  // Get wallets by risk score
+  getHighRiskWallets: (params?: { minRiskScore?: number; limit?: number }): Promise<WalletProfile[]> =>
+    api.get('/sentinel/wallets/high-risk', { params }).then(res => res.data),
+
+  // Get wallet alerts
+  getWalletAlerts: (wallet: string): Promise<SentinelAlert[]> =>
+    api.get(`/sentinel/wallets/${wallet}/alerts`).then(res => res.data),
+
+  // Get linked wallets (cluster analysis)
+  getLinkedWallets: (wallet: string): Promise<string[]> =>
+    api.get(`/sentinel/wallets/${wallet}/linked`).then(res => res.data),
+
+  // ========== Statistics ==========
+  
+  // Get overall statistics
+  getStats: (periodDays?: number): Promise<SentinelStats> =>
+    api.get('/sentinel/stats', { params: { periodDays } }).then(res => res.data),
+
+  // Get real-time metrics
+  getRealTimeMetrics: (): Promise<RealTimeMetrics> =>
+    api.get('/sentinel/metrics').then(res => res.data),
+
+  // Get historical statistics
+  getHistoricalStats: (params?: { startDate?: string; endDate?: string; granularity?: 'hour' | 'day' | 'week' }): Promise<Array<{ date: string; stats: SentinelStats }>> =>
+    api.get('/sentinel/stats/historical', { params }).then(res => res.data),
+
+  // ========== Threat Detection ==========
+  
+  // Get threat clusters
+  getThreatClusters: (): Promise<ThreatCluster[]> =>
+    api.get('/sentinel/threats/clusters').then(res => res.data),
+
+  // Get specific cluster
+  getThreatCluster: (clusterId: string): Promise<ThreatCluster> =>
+    api.get(`/sentinel/threats/clusters/${clusterId}`).then(res => res.data),
+
+  // Get threat timeline
+  getThreatTimeline: (params?: { hours?: number }): Promise<Array<{ timestamp: string; alerts: number; severity: string }>> =>
+    api.get('/sentinel/threats/timeline', { params }).then(res => res.data),
+
+  // Get geographic threats
+  getGeoThreats: (): Promise<Array<{ region: string; alertCount: number; volumeAtRisk: number }>> =>
+    api.get('/sentinel/threats/geo').then(res => res.data),
+
+  // ========== Clawback Integration (XLS-39D) ==========
+  
+  // Get clawback proposals
+  getClawbackProposals: (params?: { status?: string }): Promise<ClawbackProposal[]> =>
+    api.get('/sentinel/clawback/proposals', { params }).then(res => res.data),
+
+  // Get single proposal
+  getClawbackProposal: (proposalId: string): Promise<ClawbackProposal> =>
+    api.get(`/sentinel/clawback/proposals/${proposalId}`).then(res => res.data),
+
+  // Cast vote on proposal
+  voteOnClawback: (vote: ClawbackVote): Promise<{ success: boolean }> =>
+    api.post(`/sentinel/clawback/proposals/${vote.proposalId}/vote`, vote).then(res => res.data),
+
+  // Execute approved clawback
+  executeClawback: (proposalId: string): Promise<{ success: boolean; transactionHash?: string }> =>
+    api.post(`/sentinel/clawback/proposals/${proposalId}/execute`).then(res => res.data),
+
+  // ========== System ==========
+  
+  // Get system status
+  getStatus: (): Promise<SentinelStatusResponse> =>
+    api.get('/sentinel/status').then(res => res.data),
+
+  // Get system configuration
+  getConfig: (): Promise<Record<string, unknown>> =>
+    api.get('/sentinel/config').then(res => res.data),
+
+  // Health check
+  healthCheck: (): Promise<{ status: 'healthy' | 'degraded' | 'critical'; details?: Record<string, unknown> }> =>
+    api.get('/sentinel/health').then(res => res.data),
+
+  // ========== Transaction Monitoring ==========
+  
+  // Submit transaction for analysis (manual)
+  analyzeTransaction: (data: {
+    hash: string;
+    from: string;
+    to: string;
+    amount: number;
+    asset: string;
+    network: 'XRPL' | 'SOLANA' | 'ETHEREUM';
+  }): Promise<{ analyzed: boolean; alertCreated: boolean; alertId?: string }> =>
+    api.post('/sentinel/analyze', data).then(res => res.data),
+
+  // Get processing queue status
+  getQueueStatus: (): Promise<{ queueSize: number; processing: boolean; lastProcessed?: string }> =>
+    api.get('/sentinel/queue').then(res => res.data),
+};
+
 export default api;
