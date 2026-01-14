@@ -27,10 +27,11 @@ This document establishes **binding rules** for all human developers, AI develop
 3. [Code Quality Standards](#code-quality-standards)
 4. [Security Requirements](#security-requirements)
 5. [Development Workflow](#development-workflow)
-6. [Dashboard Status Tracker](#dashboard-status-tracker)
-7. [Work Log Requirements](#work-log-requirements)
-8. [AI Platform Specific Rules](#ai-platform-specific-rules)
-9. [Next Steps Rule](#next-steps-rule)
+6. [Pull Request Review Rule](#pull-request-review-rule)
+7. [Dashboard Status Tracker](#dashboard-status-tracker)
+8. [Work Log Requirements](#work-log-requirements)
+9. [AI Platform Specific Rules](#ai-platform-specific-rules)
+10. [Next Steps Rule](#next-steps-rule)
 
 ---
 
@@ -288,6 +289,115 @@ docs(hub): Update Platform Oversight Hub with new rules
 
 ---
 
+## 🔐 PULL REQUEST REVIEW RULE
+
+> **⚠️ CRITICAL: ALL COMMITS MUST GO THROUGH PULL REQUEST REVIEW**
+
+### Mandatory PR Workflow
+
+**Effective Date**: 2026-01-14  
+**Status**: MANDATORY - NO EXCEPTIONS
+
+### Rule Statement
+
+From this point forward, **ALL developers (human and AI) are PROHIBITED from pushing commits directly to the `main` branch**. Every code change MUST:
+
+1. Be committed to a feature/development branch
+2. Have a Pull Request created for review
+3. Have the PR link provided to the repository owner for review
+4. Wait for the owner to merge/push the changes to `main`
+
+### Workflow Process
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    MANDATORY PR WORKFLOW                        │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  1. Developer makes changes                                     │
+│           ↓                                                     │
+│  2. Commit to feature branch (genspark_ai_developer, etc.)     │
+│           ↓                                                     │
+│  3. Push branch to remote                                       │
+│           ↓                                                     │
+│  4. Create Pull Request (PR) → main                             │
+│           ↓                                                     │
+│  5. ⚠️ PROVIDE PR LINK TO OWNER ⚠️                              │
+│           ↓                                                     │
+│  6. Owner reviews and approves                                  │
+│           ↓                                                     │
+│  7. Owner merges/pushes to main                                 │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### PR Link Delivery Requirements
+
+When providing the PR link, you MUST include:
+
+```markdown
+## 🔗 PULL REQUEST FOR REVIEW
+
+**PR Link**: [GitHub PR URL]
+**Branch**: [source branch] → main
+**Title**: [PR title]
+
+### Changes Summary:
+- [List of changes]
+
+### Files Modified/Created:
+- [List of files]
+
+### Ready for Review:
+- [ ] Code compiles without errors
+- [ ] No mock/simulation code
+- [ ] No sensitive data
+- [ ] Work Log updated
+- [ ] Next Steps provided
+
+**Please review and merge when ready.**
+```
+
+### Prohibited Actions
+
+```
+❌ FORBIDDEN:
+- git push origin main (direct push to main)
+- git push -f origin main (force push to main)
+- Merging PRs without owner approval
+- Bypassing branch protection
+- Auto-merging without review
+```
+
+```
+✅ REQUIRED:
+- git push origin genspark_ai_developer (push to dev branch)
+- git push origin feature/your-feature (push to feature branch)
+- Creating PR and providing link to owner
+- Waiting for owner to merge
+```
+
+### Enforcement
+
+| Offense | Consequence |
+|---------|-------------|
+| First | Commit reverted, warning issued |
+| Second | Branch protection enabled, access restricted |
+| Third | Contributor access revoked |
+
+### Emergency Hotfix Exception
+
+In case of critical security vulnerabilities:
+1. Create hotfix branch
+2. Make minimal required changes
+3. Create PR with `[URGENT]` prefix
+4. Contact owner immediately via all available channels
+5. Document the urgency in PR description
+
+**Note**: Even urgent fixes require PR review. The owner will prioritize urgent PRs.
+
+---
+
 ## 📊 DASHBOARD STATUS TRACKER
 
 ### Platform Oversight Hub - Dashboard Completion
@@ -384,8 +494,10 @@ You **MUST** update `WORK_LOG.md` with:
 4. **ALWAYS** use proper TypeScript types (no `any`)
 5. **ALWAYS** implement real functionality, not stubs
 6. **ALWAYS** update `WORK_LOG.md` after completing work
-7. **ALWAYS** inform the user when you push to GitHub
-8. **NEVER** commit sensitive data
+7. **🔴 NEVER** push directly to `main` branch
+8. **🔴 ALWAYS** create a Pull Request and provide the PR link to the owner
+9. **🔴 ALWAYS** wait for owner to review and merge to `main`
+10. **NEVER** commit sensitive data
 
 ### Session Start Checklist for AI:
 
@@ -404,8 +516,38 @@ You **MUST** update `WORK_LOG.md` with:
 □ No sensitive data in commits
 □ TypeScript compiles without errors
 □ Work Log updated
-□ Changes committed and pushed
-□ User informed of push status
+□ Changes committed to development branch (NOT main)
+□ Pull Request created
+□ 🔴 PR LINK PROVIDED TO OWNER FOR REVIEW
+□ Waiting for owner to merge to main
+```
+
+### PR Link Template for AI:
+
+When completing work, AI platforms MUST provide the following:
+
+```markdown
+## 🔗 PULL REQUEST READY FOR REVIEW
+
+**PR Link**: https://github.com/SMMM25/Verity-Protocol-VRTY-/pull/[NUMBER]
+**Branch**: genspark_ai_developer → main
+**Title**: [Descriptive title of changes]
+
+### Summary of Changes:
+1. [Change 1]
+2. [Change 2]
+3. [Change 3]
+
+### Files Changed:
+- [file1.tsx]
+- [file2.ts]
+
+### Build Status:
+- ✅ TypeScript compiled successfully
+- ✅ No errors or warnings
+- ✅ Work Log updated
+
+**👉 Please review and merge when ready.**
 ```
 
 ---
