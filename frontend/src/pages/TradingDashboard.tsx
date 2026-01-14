@@ -1,0 +1,644 @@
+import { useState, useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { 
+  TrendingUp, 
+  TrendingDown, 
+  ArrowUpRight,
+  Activity,
+  BarChart3,
+  RefreshCw,
+  Clock,
+  Wallet,
+  AlertCircle,
+} from 'lucide-react';
+import { dexApi } from '../api/client';
+import type { OrderBook, OrderBookEntry, MarketStats } from '../types/dex';
+
+// ============================================================
+// MOCK DATA (for demo before live DEX listing)
+// ============================================================
+
+const MOCK_ORDER_BOOK: OrderBook = {
+  pair: {
+    base: { currency: 'VRTY', issuer: 'rBeHfq9vRjZ8Cth1sMbp2nJvExmxSxAH8f' },
+    quote: { currency: 'XRP' },
+  },
+  asks: [
+    { price: '0.02050000', amount: '50000', total: '1025.00' },
+    { price: '0.02040000', amount: '75000', total: '1530.00' },
+    { price: '0.02030000', amount: '100000', total: '2030.00' },
+    { price: '0.02020000', amount: '150000', total: '3030.00' },
+    { price: '0.02010000', amount: '200000', total: '4020.00' },
+  ],
+  bids: [
+    { price: '0.01990000', amount: '200000', total: '3980.00' },
+    { price: '0.01980000', amount: '150000', total: '2970.00' },
+    { price: '0.01970000', amount: '100000', total: '1970.00' },
+    { price: '0.01960000', amount: '75000', total: '1470.00' },
+    { price: '0.01950000', amount: '50000', total: '975.00' },
+  ],
+  spread: 1.0,
+  midPrice: '0.02000000',
+  timestamp: new Date().toISOString(),
+};
+
+const MOCK_MARKET_STATS: MarketStats = {
+  pair: MOCK_ORDER_BOOK.pair,
+  lastPrice: '0.02000000',
+  high24h: '0.02100000',
+  low24h: '0.01900000',
+  volume24h: '5000000',
+  volumeQuote24h: '100000',
+  change24h: '+0.00020000',
+  changePercent24h: '+1.01',
+  trades24h: 127,
+  timestamp: new Date().toISOString(),
+};
+
+// ============================================================
+// ORDER BOOK COMPONENT
+// ============================================================
+
+function OrderBookDisplay({ orderBook }: { orderBook: OrderBook }) {
+  const maxAskTotal = useMemo(() => {
+    return Math.max(...orderBook.asks.map(o => parseFloat(o.total)));
+  }, [orderBook.asks]);
+
+  const maxBidTotal = useMemo(() => {
+    return Math.max(...orderBook.bids.map(o => parseFloat(o.total)));
+  }, [orderBook.bids]);
+
+  return (
+    <div className="bg-gray-800 rounded-xl p-4">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+          <BarChart3 className="w-5 h-5 text-purple-400" />
+          Order Book
+        </h3>
+        <span className="text-xs text-gray-400">VRTY/XRP</span>
+      </div>
+
+      {/* Header */}
+      <div className="grid grid-cols-3 text-xs text-gray-400 pb-2 border-b border-gray-700">
+        <span>Price (XRP)</span>
+        <span className="text-right">Amount (VRTY)</span>
+        <span className="text-right">Total (XRP)</span>
+      </div>
+
+      {/* Asks (Sell Orders) - Red */}
+      <div className="py-2">
+        {orderBook.asks.slice().reverse().map((ask, idx) => (
+          <OrderBookRow
+            key={`ask-${idx}`}
+            entry={ask}
+            side="ask"
+            maxTotal={maxAskTotal}
+          />
+        ))}
+      </div>
+
+      {/* Spread */}
+      <div className="py-2 px-2 bg-gray-700/50 rounded flex items-center justify-between">
+        <span className="text-white font-semibold">
+          {orderBook.midPrice ? parseFloat(orderBook.midPrice).toFixed(4) : '-'}
+        </span>
+        <span className="text-xs text-gray-400">
+          Spread: {orderBook.spread?.toFixed(2) || '-'}%
+        </span>
+      </div>
+
+      {/* Bids (Buy Orders) - Green */}
+      <div className="py-2">
+        {orderBook.bids.map((bid, idx) => (
+          <OrderBookRow
+            key={`bid-${idx}`}
+            entry={bid}
+            side="bid"
+            maxTotal={maxBidTotal}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function OrderBookRow({ 
+  entry, 
+  side, 
+  maxTotal 
+}: { 
+  entry: OrderBookEntry; 
+  side: 'ask' | 'bid'; 
+  maxTotal: number;
+}) {
+  const percentage = (parseFloat(entry.total) / maxTotal) * 100;
+  const bgColor = side === 'ask' ? 'bg-red-500/20' : 'bg-green-500/20';
+  const textColor = side === 'ask' ? 'text-red-400' : 'text-green-400';
+
+  return (
+    <div className="relative grid grid-cols-3 text-sm py-1 hover:bg-gray-700/30 cursor-pointer">
+      <div
+        className={`absolute inset-0 ${bgColor} transition-all`}
+        style={{ width: `${percentage}%`, right: 0, left: 'auto' }}
+      />
+      <span className={`relative z-10 ${textColor}`}>
+        {parseFloat(entry.price).toFixed(4)}
+      </span>
+      <span className="relative z-10 text-right text-gray-300">
+        {formatNumber(parseFloat(entry.amount))}
+      </span>
+      <span className="relative z-10 text-right text-gray-400">
+        {formatNumber(parseFloat(entry.total))}
+      </span>
+    </div>
+  );
+}
+
+// ============================================================
+// MARKET STATS COMPONENT
+// ============================================================
+
+function MarketStatsDisplay({ stats }: { stats: MarketStats }) {
+  const priceChange = parseFloat(stats.changePercent24h || '0');
+  const isPositive = priceChange >= 0;
+  const xrpPrice = 0.50; // Assumed XRP/USD for display
+
+  return (
+    <div className="bg-gray-800 rounded-xl p-4">
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h2 className="text-2xl font-bold text-white">VRTY/XRP</h2>
+          <p className="text-sm text-gray-400">Verity Protocol</p>
+        </div>
+        <div className="text-right">
+          <div className="text-3xl font-bold text-white">
+            {parseFloat(stats.lastPrice).toFixed(4)}
+          </div>
+          <div className="text-sm text-gray-400">
+            ${(parseFloat(stats.lastPrice) * xrpPrice).toFixed(4)} USD
+          </div>
+        </div>
+      </div>
+
+      <div className={`flex items-center gap-2 mb-4 ${isPositive ? 'text-green-400' : 'text-red-400'}`}>
+        {isPositive ? (
+          <TrendingUp className="w-5 h-5" />
+        ) : (
+          <TrendingDown className="w-5 h-5" />
+        )}
+        <span className="text-lg font-semibold">
+          {isPositive ? '+' : ''}{priceChange.toFixed(2)}%
+        </span>
+        <span className="text-sm text-gray-400">24h</span>
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <StatBox 
+          label="24h High" 
+          value={parseFloat(stats.high24h).toFixed(4)} 
+          unit="XRP" 
+        />
+        <StatBox 
+          label="24h Low" 
+          value={parseFloat(stats.low24h).toFixed(4)} 
+          unit="XRP" 
+        />
+        <StatBox 
+          label="24h Volume" 
+          value={formatNumber(parseFloat(stats.volume24h))} 
+          unit="VRTY" 
+        />
+        <StatBox 
+          label="Trades" 
+          value={stats.trades24h.toString()} 
+          unit="24h" 
+        />
+      </div>
+    </div>
+  );
+}
+
+function StatBox({ label, value, unit }: { label: string; value: string; unit: string }) {
+  return (
+    <div className="bg-gray-700/50 rounded-lg p-3">
+      <p className="text-xs text-gray-400 mb-1">{label}</p>
+      <p className="text-lg font-semibold text-white">{value}</p>
+      <p className="text-xs text-gray-500">{unit}</p>
+    </div>
+  );
+}
+
+// ============================================================
+// ORDER FORM COMPONENT
+// ============================================================
+
+function OrderForm() {
+  const [side, setSide] = useState<'buy' | 'sell'>('buy');
+  const [orderType, setOrderType] = useState<'limit' | 'market'>('limit');
+  const [amount, setAmount] = useState('');
+  const [price, setPrice] = useState('0.02');
+
+  const total = useMemo(() => {
+    const amt = parseFloat(amount) || 0;
+    const prc = parseFloat(price) || 0;
+    return (amt * prc).toFixed(4);
+  }, [amount, price]);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    // Order submission will be implemented when wallet is connected
+    alert('Connect wallet to place orders. DEX listing coming soon!');
+  };
+
+  return (
+    <div className="bg-gray-800 rounded-xl p-4">
+      <h3 className="text-lg font-semibold text-white mb-4">Place Order</h3>
+
+      {/* Buy/Sell Tabs */}
+      <div className="flex mb-4">
+        <button
+          onClick={() => setSide('buy')}
+          className={`flex-1 py-2 rounded-l-lg font-semibold transition-colors ${
+            side === 'buy'
+              ? 'bg-green-600 text-white'
+              : 'bg-gray-700 text-gray-400 hover:bg-gray-600'
+          }`}
+        >
+          Buy
+        </button>
+        <button
+          onClick={() => setSide('sell')}
+          className={`flex-1 py-2 rounded-r-lg font-semibold transition-colors ${
+            side === 'sell'
+              ? 'bg-red-600 text-white'
+              : 'bg-gray-700 text-gray-400 hover:bg-gray-600'
+          }`}
+        >
+          Sell
+        </button>
+      </div>
+
+      {/* Order Type */}
+      <div className="flex gap-4 mb-4">
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input
+            type="radio"
+            name="orderType"
+            checked={orderType === 'limit'}
+            onChange={() => setOrderType('limit')}
+            className="text-purple-600"
+          />
+          <span className="text-sm text-gray-300">Limit</span>
+        </label>
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input
+            type="radio"
+            name="orderType"
+            checked={orderType === 'market'}
+            onChange={() => setOrderType('market')}
+            className="text-purple-600"
+          />
+          <span className="text-sm text-gray-300">Market</span>
+        </label>
+      </div>
+
+      <form onSubmit={handleSubmit} className="space-y-4">
+        {/* Price Input */}
+        {orderType === 'limit' && (
+          <div>
+            <label className="block text-sm text-gray-400 mb-1">Price (XRP)</label>
+            <input
+              type="number"
+              step="0.0001"
+              value={price}
+              onChange={(e) => setPrice(e.target.value)}
+              className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-purple-500"
+              placeholder="0.0200"
+            />
+          </div>
+        )}
+
+        {/* Amount Input */}
+        <div>
+          <label className="block text-sm text-gray-400 mb-1">Amount (VRTY)</label>
+          <input
+            type="number"
+            step="1"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-purple-500"
+            placeholder="1000"
+          />
+          {/* Quick Amount Buttons */}
+          <div className="flex gap-2 mt-2">
+            {['1000', '10000', '50000', '100000'].map((amt) => (
+              <button
+                key={amt}
+                type="button"
+                onClick={() => setAmount(amt)}
+                className="flex-1 py-1 text-xs bg-gray-700 text-gray-300 rounded hover:bg-gray-600 transition-colors"
+              >
+                {formatNumber(parseInt(amt))}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Total */}
+        <div className="bg-gray-700/50 rounded-lg p-3">
+          <div className="flex justify-between text-sm">
+            <span className="text-gray-400">Total</span>
+            <span className="text-white font-semibold">{total} XRP</span>
+          </div>
+          <div className="flex justify-between text-xs mt-1">
+            <span className="text-gray-500">Est. USD</span>
+            <span className="text-gray-400">${(parseFloat(total) * 0.5).toFixed(2)}</span>
+          </div>
+        </div>
+
+        {/* Submit Button */}
+        <button
+          type="submit"
+          className={`w-full py-3 rounded-lg font-semibold transition-colors flex items-center justify-center gap-2 ${
+            side === 'buy'
+              ? 'bg-green-600 hover:bg-green-700 text-white'
+              : 'bg-red-600 hover:bg-red-700 text-white'
+          }`}
+        >
+          <Wallet className="w-4 h-4" />
+          {side === 'buy' ? 'Buy VRTY' : 'Sell VRTY'}
+        </button>
+
+        {/* Warning */}
+        <div className="flex items-start gap-2 text-xs text-yellow-400/80 bg-yellow-400/10 rounded-lg p-3">
+          <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+          <span>
+            Connect your XRPL wallet (Xumm/Crossmark) to place real orders. 
+            DEX listing coming soon after utility launch.
+          </span>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+// ============================================================
+// RECENT TRADES COMPONENT
+// ============================================================
+
+function RecentTrades() {
+  // Mock recent trades
+  const trades = [
+    { time: '12:34:56', side: 'buy' as const, price: '0.0200', amount: '5000', total: '100.00' },
+    { time: '12:33:21', side: 'sell' as const, price: '0.0199', amount: '2500', total: '49.75' },
+    { time: '12:32:45', side: 'buy' as const, price: '0.0200', amount: '10000', total: '200.00' },
+    { time: '12:31:12', side: 'buy' as const, price: '0.0199', amount: '7500', total: '149.25' },
+    { time: '12:30:00', side: 'sell' as const, price: '0.0198', amount: '15000', total: '297.00' },
+  ];
+
+  return (
+    <div className="bg-gray-800 rounded-xl p-4">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+          <Clock className="w-5 h-5 text-purple-400" />
+          Recent Trades
+        </h3>
+        <span className="text-xs text-gray-400">Live (Demo)</span>
+      </div>
+
+      {/* Header */}
+      <div className="grid grid-cols-4 text-xs text-gray-400 pb-2 border-b border-gray-700">
+        <span>Time</span>
+        <span className="text-right">Price</span>
+        <span className="text-right">Amount</span>
+        <span className="text-right">Total</span>
+      </div>
+
+      {/* Trades */}
+      <div className="py-2 space-y-1">
+        {trades.map((trade, idx) => (
+          <div key={idx} className="grid grid-cols-4 text-sm py-1 hover:bg-gray-700/30">
+            <span className="text-gray-400">{trade.time}</span>
+            <span className={`text-right ${trade.side === 'buy' ? 'text-green-400' : 'text-red-400'}`}>
+              {trade.price}
+            </span>
+            <span className="text-right text-gray-300">{formatNumber(parseInt(trade.amount))}</span>
+            <span className="text-right text-gray-400">{trade.total}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// PRICE CHART PLACEHOLDER
+// ============================================================
+
+function PriceChart() {
+  return (
+    <div className="bg-gray-800 rounded-xl p-4 h-64 flex flex-col">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+          <Activity className="w-5 h-5 text-purple-400" />
+          Price Chart
+        </h3>
+        <div className="flex gap-2">
+          {['1H', '4H', '1D', '1W'].map((tf) => (
+            <button
+              key={tf}
+              className="px-2 py-1 text-xs bg-gray-700 text-gray-300 rounded hover:bg-gray-600"
+            >
+              {tf}
+            </button>
+          ))}
+        </div>
+      </div>
+      
+      <div className="flex-1 flex items-center justify-center bg-gray-700/30 rounded-lg">
+        <div className="text-center text-gray-400">
+          <Activity className="w-12 h-12 mx-auto mb-2 opacity-50" />
+          <p className="text-sm">Chart will display live data</p>
+          <p className="text-xs">after DEX listing</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// HELPER FUNCTIONS
+// ============================================================
+
+function formatNumber(num: number): string {
+  if (num >= 1000000) {
+    return (num / 1000000).toFixed(2) + 'M';
+  }
+  if (num >= 1000) {
+    return (num / 1000).toFixed(1) + 'K';
+  }
+  return num.toLocaleString();
+}
+
+// ============================================================
+// MAIN COMPONENT
+// ============================================================
+
+export default function TradingDashboard() {
+  const [isDemo, setIsDemo] = useState(true);
+
+  // Try to fetch real data, fall back to mock
+  const { data: orderBookData, refetch: refetchOrderBook } = useQuery({
+    queryKey: ['orderBook'],
+    queryFn: () => dexApi.getOrderBook(),
+    retry: false,
+    enabled: !isDemo,
+  });
+
+  const { data: statsData } = useQuery({
+    queryKey: ['marketStats'],
+    queryFn: () => dexApi.getMarketStats(),
+    retry: false,
+    enabled: !isDemo,
+  });
+
+  const orderBook = isDemo ? MOCK_ORDER_BOOK : (orderBookData?.data || MOCK_ORDER_BOOK);
+  const marketStats = isDemo ? MOCK_MARKET_STATS : (statsData?.data || MOCK_MARKET_STATS);
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-white">Trading Dashboard</h1>
+          <p className="text-gray-400">XRPL Native DEX - Zero Fees</p>
+        </div>
+        <div className="flex items-center gap-4">
+          {/* Demo Mode Toggle */}
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-gray-400">Demo Mode</span>
+            <button
+              onClick={() => setIsDemo(!isDemo)}
+              className={`w-12 h-6 rounded-full transition-colors ${
+                isDemo ? 'bg-purple-600' : 'bg-gray-600'
+              }`}
+            >
+              <div
+                className={`w-5 h-5 rounded-full bg-white transform transition-transform ${
+                  isDemo ? 'translate-x-6' : 'translate-x-0.5'
+                }`}
+              />
+            </button>
+          </div>
+          <button
+            onClick={() => refetchOrderBook()}
+            className="flex items-center gap-2 px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-600 transition-colors"
+          >
+            <RefreshCw className="w-4 h-4" />
+            Refresh
+          </button>
+        </div>
+      </div>
+
+      {/* Demo Mode Banner */}
+      {isDemo && (
+        <div className="bg-purple-600/20 border border-purple-500/30 rounded-xl p-4 flex items-center gap-3">
+          <AlertCircle className="w-5 h-5 text-purple-400" />
+          <div>
+            <p className="text-purple-300 font-medium">Demo Mode Active</p>
+            <p className="text-sm text-purple-400/80">
+              Showing simulated data. Live trading will be enabled after DEX listing.
+              Initial price: 0.02 XRP/VRTY (~$0.01)
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Market Stats */}
+      <MarketStatsDisplay stats={marketStats} />
+
+      {/* Main Trading Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Order Book */}
+        <div className="lg:col-span-1">
+          <OrderBookDisplay orderBook={orderBook} />
+        </div>
+
+        {/* Price Chart & Order Form */}
+        <div className="lg:col-span-1 space-y-6">
+          <PriceChart />
+          <RecentTrades />
+        </div>
+
+        {/* Order Form */}
+        <div className="lg:col-span-1">
+          <OrderForm />
+        </div>
+      </div>
+
+      {/* Trading Info */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="bg-gray-800 rounded-xl p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <div className="w-8 h-8 rounded-full bg-purple-600/20 flex items-center justify-center">
+              <ArrowUpRight className="w-4 h-4 text-purple-400" />
+            </div>
+            <span className="text-white font-medium">Zero Trading Fees</span>
+          </div>
+          <p className="text-sm text-gray-400">
+            XRPL native DEX has no trading fees. Only minimal XRP network fees (~0.00001 XRP).
+          </p>
+        </div>
+
+        <div className="bg-gray-800 rounded-xl p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <div className="w-8 h-8 rounded-full bg-green-600/20 flex items-center justify-center">
+              <Activity className="w-4 h-4 text-green-400" />
+            </div>
+            <span className="text-white font-medium">Instant Settlement</span>
+          </div>
+          <p className="text-sm text-gray-400">
+            Trades settle in 3-5 seconds on XRPL. No waiting for confirmations.
+          </p>
+        </div>
+
+        <div className="bg-gray-800 rounded-xl p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <div className="w-8 h-8 rounded-full bg-blue-600/20 flex items-center justify-center">
+              <Wallet className="w-4 h-4 text-blue-400" />
+            </div>
+            <span className="text-white font-medium">Non-Custodial</span>
+          </div>
+          <p className="text-sm text-gray-400">
+            Trade directly from your wallet. Your keys, your crypto. No centralized custody.
+          </p>
+        </div>
+      </div>
+
+      {/* Token Info */}
+      <div className="bg-gray-800 rounded-xl p-6">
+        <h3 className="text-lg font-semibold text-white mb-4">VRTY Token Information</h3>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div>
+            <p className="text-sm text-gray-400">Total Supply</p>
+            <p className="text-lg font-semibold text-white">1,000,000,000</p>
+          </div>
+          <div>
+            <p className="text-sm text-gray-400">Blockchain</p>
+            <p className="text-lg font-semibold text-white">XRPL Mainnet</p>
+          </div>
+          <div>
+            <p className="text-sm text-gray-400">Issuer</p>
+            <p className="text-lg font-semibold text-white font-mono text-sm truncate">
+              rBeHfq9vRj...SxAH8f
+            </p>
+          </div>
+          <div>
+            <p className="text-sm text-gray-400">Listing Status</p>
+            <p className="text-lg font-semibold text-yellow-400">Pre-Launch</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

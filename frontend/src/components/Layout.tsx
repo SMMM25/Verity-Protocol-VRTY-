@@ -6,21 +6,26 @@ import {
   LogOut, 
   Receipt,
   LayoutDashboard,
-  TrendingUp,
   Users,
-  Zap
+  Zap,
+  Wallet,
+  LineChart
 } from 'lucide-react';
 import { useUser } from '../App';
 
-const navItems = [
+const taxNavItems = [
   { to: '/app/tax', icon: Calculator, label: 'Tax Dashboard', exact: true },
   { to: '/app/tax/transactions', icon: Receipt, label: 'Transactions' },
   { to: '/app/tax/reports', icon: FileText, label: 'Reports' },
   { to: '/app/tax/settings', icon: Settings, label: 'Settings' },
 ];
 
+const tradingNavItems = [
+  { to: '/app/trading', icon: LineChart, label: 'Trading', exact: true },
+  { to: '/app/trading/portfolio', icon: Wallet, label: 'Portfolio' },
+];
+
 const comingSoonItems = [
-  { icon: TrendingUp, label: 'Trading', badge: 'Soon' },
   { icon: Users, label: 'Guilds', badge: 'Soon' },
   { icon: Zap, label: 'Signals', badge: 'Soon' },
 ];
@@ -52,11 +57,12 @@ export default function Layout() {
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 p-4">
+        <nav className="flex-1 p-4 overflow-y-auto">
+          {/* Tax Section */}
           <div className="mb-6">
             <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Tax Center</p>
             <ul className="space-y-1">
-              {navItems.map((item) => (
+              {taxNavItems.map((item) => (
                 <li key={item.to}>
                   <NavLink
                     to={item.to}
@@ -77,6 +83,35 @@ export default function Layout() {
             </ul>
           </div>
 
+          {/* Trading Section */}
+          <div className="mb-6">
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">
+              Trading
+              <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-purple-600/30 text-purple-400">NEW</span>
+            </p>
+            <ul className="space-y-1">
+              {tradingNavItems.map((item) => (
+                <li key={item.to}>
+                  <NavLink
+                    to={item.to}
+                    end={item.exact}
+                    className={({ isActive }) =>
+                      `flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${
+                        isActive
+                          ? 'bg-purple-600 text-white'
+                          : 'text-slate-400 hover:bg-slate-700 hover:text-white'
+                      }`
+                    }
+                  >
+                    <item.icon className="w-5 h-5" />
+                    <span>{item.label}</span>
+                  </NavLink>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          {/* Coming Soon */}
           <div>
             <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Coming Soon</p>
             <ul className="space-y-1">
@@ -117,7 +152,7 @@ export default function Layout() {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 overflow-auto">
+      <main className="flex-1 overflow-auto bg-gray-900 p-6">
         <Outlet />
       </main>
     </div>

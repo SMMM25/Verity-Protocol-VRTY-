@@ -6,6 +6,8 @@ import TaxDashboard from './pages/TaxDashboard';
 import TaxTransactions from './pages/TaxTransactions';
 import TaxReports from './pages/TaxReports';
 import TaxSettings from './pages/TaxSettings';
+import TradingDashboard from './pages/TradingDashboard';
+import Portfolio from './pages/Portfolio';
 import Landing from './pages/Landing';
 
 const queryClient = new QueryClient({
@@ -56,10 +58,14 @@ function App() {
             <Route path="/" element={<Landing />} />
             <Route path="/app" element={isLoggedIn ? <Layout /> : <Navigate to="/" />}>
               <Route index element={<Navigate to="tax" replace />} />
+              {/* Tax Routes */}
               <Route path="tax" element={<TaxDashboard />} />
               <Route path="tax/transactions" element={<TaxTransactions />} />
               <Route path="tax/reports" element={<TaxReports />} />
               <Route path="tax/settings" element={<TaxSettings />} />
+              {/* Trading Routes */}
+              <Route path="trading" element={<TradingDashboard />} />
+              <Route path="trading/portfolio" element={<Portfolio />} />
             </Route>
           </Routes>
         </BrowserRouter>

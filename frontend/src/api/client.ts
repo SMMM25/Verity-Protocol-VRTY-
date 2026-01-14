@@ -84,4 +84,69 @@ export const taxApi = {
     api.get('/tax/methodology').then(res => res.data),
 };
 
+// ============================================================
+// DEX API
+// ============================================================
+
+export const dexApi = {
+  // Order Book
+  getOrderBook: (pair?: string, limit?: number) =>
+    api.get('/dex/orderbook', { params: { pair, limit } }).then(res => res.data),
+
+  // Market Stats
+  getMarketStats: (pair?: string) =>
+    api.get('/dex/stats', { params: { pair } }).then(res => res.data),
+
+  // Current Price
+  getCurrentPrice: (pair?: string) =>
+    api.get('/dex/price', { params: { pair } }).then(res => res.data),
+
+  // Recent Trades
+  getRecentTrades: (pair?: string, limit?: number) =>
+    api.get('/dex/trades', { params: { pair, limit } }).then(res => res.data),
+
+  // Create Order (requires wallet connection)
+  createOrder: (data: {
+    side: 'buy' | 'sell';
+    amount: string;
+    price: string;
+    pair?: string;
+  }) =>
+    api.post('/dex/order', data).then(res => res.data),
+
+  // Cancel Order
+  cancelOrder: (offerSequence: number) =>
+    api.delete(`/dex/order/${offerSequence}`).then(res => res.data),
+
+  // Get Account Orders
+  getAccountOrders: (account: string) =>
+    api.get(`/dex/orders/${account}`).then(res => res.data),
+};
+
+// ============================================================
+// XRPL API
+// ============================================================
+
+export const xrplApi = {
+  // Network Info
+  getNetworkInfo: () =>
+    api.get('/xrpl/info').then(res => res.data),
+
+  // Account Info
+  getAccountInfo: (address: string) =>
+    api.get(`/xrpl/account/${address}`).then(res => res.data),
+
+  // Account Balances
+  getBalances: (address: string) =>
+    api.get(`/xrpl/balances/${address}`).then(res => res.data),
+
+  // Account Trustlines
+  getTrustlines: (address: string) =>
+    api.get(`/xrpl/trustlines/${address}`).then(res => res.data),
+
+  // Transaction History
+  getTransactions: (address: string, limit?: number) =>
+    api.get(`/xrpl/transactions/${address}`, { params: { limit } }).then(res => res.data),
+};
+
 export default api;
