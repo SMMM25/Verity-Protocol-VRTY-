@@ -41,6 +41,8 @@ const CONFIG = {
   // VRTY Token Configuration
   vrty: {
     currencyCode: 'VRTY',
+    // Hex-encoded currency code (VRTY padded to 40 chars) - used in some XRPL queries
+    currencyHex: '5652545900000000000000000000000000000000',
     issuerAddress: process.env['VRTY_ISSUER_ADDRESS'] || 'rBeHfq9vRjZ8Cth1sMbp2nJvExmxSxAH8f',
     totalSupply: '1000000000', // 1 billion
   },
@@ -178,8 +180,10 @@ class XRPLOperations {
         peer: CONFIG.vrty.issuerAddress,
       });
       
+      // Check for both standard code and hex-encoded currency
       const vrtyLine = response.result.lines.find(
-        (line: any) => line.currency === CONFIG.vrty.currencyCode
+        (line: any) => line.currency === CONFIG.vrty.currencyCode || 
+                       line.currency === CONFIG.vrty.currencyHex
       );
       
       return vrtyLine?.balance || '0';
@@ -197,8 +201,10 @@ class XRPLOperations {
         peer: issuer,
       });
       
+      // Check for both standard code and hex-encoded currency
       return response.result.lines.some(
-        (line: any) => line.currency === currency
+        (line: any) => line.currency === currency || 
+                       line.currency === CONFIG.vrty.currencyHex
       );
     } catch {
       return false;
@@ -341,32 +347,38 @@ class XRPLOperations {
   async getOrderBook(): Promise<{ asks: any[]; bids: any[] }> {
     const client = await this.connect();
     
-    const takerGets = { currency: 'XRP' };
-    const takerPays = { 
-      currency: CONFIG.vrty.currencyCode, 
+    const xrpCurrency = { currency: 'XRP' };
+    // Use hex currency code for book_offers query
+    const vrtyCurrency = { 
+      currency: CONFIG.vrty.currencyHex, 
       issuer: CONFIG.vrty.issuerAddress 
     };
 
-    // Get asks (selling VRTY for XRP)
-    const asksResponse = await client.request({
-      command: 'book_offers',
-      taker_gets: takerGets,
-      taker_pays: takerPays,
-      limit: 10,
-    });
+    try {
+      // Get asks (selling VRTY for XRP)
+      const asksResponse = await client.request({
+        command: 'book_offers',
+        taker_gets: xrpCurrency,
+        taker_pays: vrtyCurrency,
+        limit: 10,
+      });
 
-    // Get bids (buying VRTY with XRP)
-    const bidsResponse = await client.request({
-      command: 'book_offers',
-      taker_gets: takerPays,
-      taker_pays: takerGets,
-      limit: 10,
-    });
+      // Get bids (buying VRTY with XRP)
+      const bidsResponse = await client.request({
+        command: 'book_offers',
+        taker_gets: vrtyCurrency,
+        taker_pays: xrpCurrency,
+        limit: 10,
+      });
 
-    return {
-      asks: asksResponse.result.offers || [],
-      bids: bidsResponse.result.offers || [],
-    };
+      return {
+        asks: asksResponse.result.offers || [],
+        bids: bidsResponse.result.offers || [],
+      };
+    } catch (error: any) {
+      console.log(`   ⚠️  Could not fetch order book: ${error.message}`);
+      return { asks: [], bids: [] };
+    }
   }
 }
 
