@@ -8,6 +8,8 @@ import TaxReports from './pages/TaxReports';
 import TaxSettings from './pages/TaxSettings';
 import TradingDashboard from './pages/TradingDashboard';
 import Portfolio from './pages/Portfolio';
+import GuildDashboard from './pages/GuildDashboard';
+import GuildDetail from './pages/GuildDetail';
 import Landing from './pages/Landing';
 
 const queryClient = new QueryClient({
@@ -66,6 +68,9 @@ function App() {
               {/* Trading Routes */}
               <Route path="trading" element={<TradingDashboard />} />
               <Route path="trading/portfolio" element={<Portfolio />} />
+              {/* Guild Routes */}
+              <Route path="guilds" element={<GuildDashboard />} />
+              <Route path="guilds/:guildId" element={<GuildDetail />} />
             </Route>
           </Routes>
         </BrowserRouter>

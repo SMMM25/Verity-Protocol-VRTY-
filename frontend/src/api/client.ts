@@ -149,4 +149,95 @@ export const xrplApi = {
     api.get(`/xrpl/transactions/${address}`, { params: { limit } }).then(res => res.data),
 };
 
+// ============================================================
+// GUILD API
+// ============================================================
+
+export const guildApi = {
+  // List guilds
+  getGuilds: (params?: { page?: number; limit?: number; member?: string; public?: boolean }) =>
+    api.get('/guilds', { params }).then(res => res.data),
+
+  // Get single guild
+  getGuild: (guildId: string) =>
+    api.get(`/guilds/${guildId}`).then(res => res.data),
+
+  // Create guild
+  createGuild: (data: {
+    name: string;
+    description?: string;
+    treasuryWallet: string;
+    ownerWallet: string;
+    membershipFee?: number;
+    minStakeToJoin?: number;
+    isPublic?: boolean;
+  }) =>
+    api.post('/guilds/treasury', data).then(res => res.data),
+
+  // Get guild audit trail
+  getAudit: (guildId: string, params?: { page?: number; limit?: number; type?: string }) =>
+    api.get(`/guilds/${guildId}/audit`, { params }).then(res => res.data),
+
+  // Members
+  getMembers: (guildId: string, params?: { includeFormer?: boolean }) =>
+    api.get(`/guilds/${guildId}/members`, { params }).then(res => res.data),
+
+  addMember: (guildId: string, data: {
+    wallet: string;
+    role?: 'ADMIN' | 'MEMBER';
+    sharePercentage?: number;
+    requesterWallet: string;
+  }) =>
+    api.post(`/guilds/${guildId}/members`, data).then(res => res.data),
+
+  updateMember: (guildId: string, wallet: string, data: {
+    role?: 'ADMIN' | 'MEMBER';
+    sharePercentage?: number;
+    requesterWallet: string;
+  }) =>
+    api.patch(`/guilds/${guildId}/members/${wallet}`, data).then(res => res.data),
+
+  removeMember: (guildId: string, wallet: string, requesterWallet: string) =>
+    api.delete(`/guilds/${guildId}/members/${wallet}`, { 
+      params: { requesterWallet } 
+    }).then(res => res.data),
+
+  // Transactions
+  getTransactions: (guildId: string, params?: { page?: number; limit?: number; type?: string }) =>
+    api.get(`/guilds/${guildId}/transactions`, { params }).then(res => res.data),
+
+  recordTransaction: (guildId: string, data: {
+    type: string;
+    amount: number;
+    currency?: string;
+    fromWallet?: string;
+    toWallet?: string;
+    description?: string;
+    txHash?: string;
+    requesterWallet: string;
+  }) =>
+    api.post(`/guilds/${guildId}/transactions`, data).then(res => res.data),
+
+  // Revenue distribution
+  distributeRevenue: (guildId: string, data: {
+    totalAmount: number;
+    currency?: string;
+    requesterWallet: string;
+    txHash?: string;
+  }) =>
+    api.post(`/guilds/${guildId}/revenue/distribute`, data).then(res => res.data),
+
+  // Stats
+  getStats: () =>
+    api.get('/guilds/stats/global').then(res => res.data),
+
+  // Dissolve guild
+  dissolveGuild: (guildId: string, data: { wallet: string; reason?: string }) =>
+    api.post(`/guilds/${guildId}/dissolve`, data).then(res => res.data),
+
+  // Health check
+  getHealth: () =>
+    api.get('/guilds/health').then(res => res.data),
+};
+
 export default api;
