@@ -241,6 +241,329 @@ export const guildApi = {
 };
 
 // ============================================================
+// TOKENIZED ASSETS API
+// ============================================================
+
+export const assetsApi = {
+  // ========== Asset Management ==========
+  
+  // Get all assets with filtering
+  getAssets: (params?: {
+    type?: string;
+    status?: string;
+    creator?: string;
+    verified?: boolean;
+    page?: number;
+    limit?: number;
+  }) =>
+    api.get('/assets', { params }).then(res => res.data),
+
+  // Get single asset by ID
+  getAsset: (assetId: string) =>
+    api.get(`/assets/${assetId}`).then(res => res.data),
+
+  // Get asset verification dashboard
+  getAssetVerification: (assetId: string) =>
+    api.get(`/assets/${assetId}/verification`).then(res => res.data),
+
+  // ========== Asset Creation ==========
+
+  // Issue new token (generic)
+  issueAsset: (data: {
+    name: string;
+    symbol: string;
+    totalSupply: string;
+    decimals?: number;
+    assetType: string;
+    requiresKYC?: boolean;
+    enableClawback?: boolean;
+    metadata?: Record<string, unknown>;
+  }) =>
+    api.post('/assets/issue', data).then(res => res.data),
+
+  // Tokenize real estate
+  tokenizeRealEstate: (data: {
+    name: string;
+    symbol: string;
+    totalSupply: string;
+    assetType: 'REAL_ESTATE';
+    propertyAddress: string;
+    propertyType: string;
+    valuationUSD: number;
+    squareFootage?: number;
+    yearBuilt?: number;
+    legalEntity?: string;
+    titleDeedHash?: string;
+    appraisalDocumentHash?: string;
+    insuranceDocumentHash?: string;
+    legalOpinionHash?: string;
+    dividendYield?: number;
+    minInvestmentUSD?: number;
+    enableClawback?: boolean;
+    jurisdictions?: string[];
+  }) =>
+    api.post('/assets/tokenize/real-estate', data).then(res => res.data),
+
+  // Tokenize private equity
+  tokenizePrivateEquity: (data: {
+    name: string;
+    symbol: string;
+    totalSupply: string;
+    assetType: 'PRIVATE_EQUITY';
+    companyName: string;
+    valuationUSD: number;
+    equityPercentage: number;
+    legalEntity?: string;
+    memorandumHash?: string;
+    financialStatementsHash?: string;
+    legalOpinionHash?: string;
+    enableClawback?: boolean;
+    jurisdictions?: string[];
+  }) =>
+    api.post('/assets/tokenize/private-equity', data).then(res => res.data),
+
+  // Tokenize securities
+  tokenizeSecurities: (data: {
+    name: string;
+    symbol: string;
+    totalSupply: string;
+    assetType: 'SECURITY';
+    securityType: string;
+    cusipNumber?: string;
+    isinNumber?: string;
+    valuationUSD: number;
+    issuerName: string;
+    prospectusHash?: string;
+    enableClawback?: boolean;
+    jurisdictions?: string[];
+  }) =>
+    api.post('/assets/tokenize/securities', data).then(res => res.data),
+
+  // Create community token
+  createCommunityToken: (data: {
+    name: string;
+    symbol: string;
+    totalSupply: string;
+    assetType: 'COMMUNITY';
+    description?: string;
+    website?: string;
+    socialLinks?: Record<string, string>;
+    enableClawback?: boolean;
+  }) =>
+    api.post('/assets/community/create', data).then(res => res.data),
+
+  // ========== Whitelist Management ==========
+  
+  // Add address to whitelist
+  addToWhitelist: (assetId: string, data: {
+    address: string;
+    kycLevel: number;
+    jurisdiction: string;
+    accreditedInvestor?: boolean;
+    qualifiedPurchaser?: boolean;
+    investorType?: string;
+    maxAllocation?: string;
+    expiresAt?: string;
+    verificationDocumentHash?: string;
+  }) =>
+    api.post(`/assets/${assetId}/whitelist`, data).then(res => res.data),
+
+  // Remove from whitelist
+  removeFromWhitelist: (assetId: string, address: string, reason?: string) =>
+    api.delete(`/assets/${assetId}/whitelist/${address}`, { 
+      data: { reason } 
+    }).then(res => res.data),
+
+  // Get whitelist for asset
+  getWhitelist: (assetId: string, params?: { page?: number; limit?: number; status?: string }) =>
+    api.get(`/assets/${assetId}/whitelist`, { params }).then(res => res.data),
+
+  // Check if address is whitelisted
+  checkWhitelist: (assetId: string, address: string) =>
+    api.get(`/assets/${assetId}/whitelist/${address}`).then(res => res.data),
+
+  // ========== Token Distribution ==========
+
+  // Distribute tokens to holder
+  distributeTokens: (assetId: string, data: {
+    recipient: string;
+    amount: string;
+    lockupPeriodDays?: number;
+    vestingSchedule?: {
+      startDate: string;
+      endDate: string;
+      cliffMonths?: number;
+      totalTokens: string;
+    };
+    memo?: string;
+  }) =>
+    api.post(`/assets/${assetId}/distribute`, data).then(res => res.data),
+
+  // Batch distribute tokens
+  batchDistribute: (assetId: string, distributions: Array<{
+    recipient: string;
+    amount: string;
+    lockupPeriodDays?: number;
+    memo?: string;
+  }>) =>
+    api.post(`/assets/${assetId}/distribute/batch`, { distributions }).then(res => res.data),
+
+  // Get holders of an asset
+  getHolders: (assetId: string, params?: { page?: number; limit?: number }) =>
+    api.get(`/assets/${assetId}/holders`, { params }).then(res => res.data),
+
+  // ========== Dividends ==========
+
+  // Distribute dividends
+  distributeDividends: (assetId: string, data: {
+    totalAmount: string;
+    currency: string;
+    recordDate: string;
+    paymentDate: string;
+    dividendType: 'REGULAR' | 'SPECIAL' | 'INTERIM' | 'FINAL';
+    taxWithholdingRate?: number;
+    snapshotBlock?: number;
+    memo?: string;
+  }) =>
+    api.post(`/assets/${assetId}/dividends`, data).then(res => res.data),
+
+  // Get dividend history
+  getDividendHistory: (assetId: string, params?: { page?: number; limit?: number }) =>
+    api.get(`/assets/${assetId}/dividends`, { params }).then(res => res.data),
+
+  // Get holder dividend claims
+  getHolderDividends: (address: string, params?: { assetId?: string; claimed?: boolean }) =>
+    api.get(`/dividends/holder/${address}`, { params }).then(res => res.data),
+
+  // Claim dividend
+  claimDividend: (distributionId: string) =>
+    api.post(`/dividends/${distributionId}/claim`).then(res => res.data),
+
+  // ========== DEX Integration ==========
+
+  // List asset on DEX
+  listOnDEX: (assetId: string, data: {
+    basePrice: string;
+    quoteCurrency: string;
+    minOrderSize: string;
+    maxOrderSize?: string;
+    tradingEnabled?: boolean;
+    marketMakerEnabled?: boolean;
+    initialLiquidity?: string;
+  }) =>
+    api.post(`/assets/${assetId}/dex/list`, data).then(res => res.data),
+
+  // Get DEX listing status
+  getDEXListing: (assetId: string) =>
+    api.get(`/assets/${assetId}/dex`).then(res => res.data),
+
+  // Update DEX listing
+  updateDEXListing: (assetId: string, data: {
+    tradingEnabled?: boolean;
+    minOrderSize?: string;
+    maxOrderSize?: string;
+  }) =>
+    api.patch(`/assets/${assetId}/dex`, data).then(res => res.data),
+
+  // Get asset order book
+  getAssetOrderBook: (assetId: string, params?: { limit?: number }) =>
+    api.get(`/assets/${assetId}/dex/orderbook`, { params }).then(res => res.data),
+
+  // Get asset trades
+  getAssetTrades: (assetId: string, params?: { limit?: number; since?: string }) =>
+    api.get(`/assets/${assetId}/dex/trades`, { params }).then(res => res.data),
+
+  // ========== Compliance ==========
+
+  // Get compliance status
+  getComplianceStatus: (assetId: string) =>
+    api.get(`/assets/${assetId}/compliance`).then(res => res.data),
+
+  // Update compliance status
+  updateComplianceStatus: (assetId: string, data: {
+    status: string;
+    notes?: string;
+    documentHashes?: string[];
+  }) =>
+    api.patch(`/assets/${assetId}/compliance`, data).then(res => res.data),
+
+  // Get clawback proposals
+  getClawbackProposals: (assetId: string) =>
+    api.get(`/assets/${assetId}/clawback/proposals`).then(res => res.data),
+
+  // Initiate clawback (governance required)
+  initiateClawback: (assetId: string, data: {
+    targetAddress: string;
+    amount: string;
+    reason: string;
+    evidence?: string;
+    governanceProposalId?: string;
+  }) =>
+    api.post(`/assets/${assetId}/clawback/initiate`, data).then(res => res.data),
+
+  // ========== Asset Updates ==========
+
+  // Update asset metadata
+  updateAssetMetadata: (assetId: string, data: {
+    description?: string;
+    website?: string;
+    documents?: Array<{ name: string; hash: string; type: string }>;
+    images?: string[];
+    valuationUSD?: number;
+  }) =>
+    api.patch(`/assets/${assetId}/metadata`, data).then(res => res.data),
+
+  // Update asset status
+  updateAssetStatus: (assetId: string, status: string, reason?: string) =>
+    api.patch(`/assets/${assetId}/status`, { status, reason }).then(res => res.data),
+
+  // ========== Portfolio ==========
+
+  // Get user's asset holdings
+  getPortfolio: (address: string) =>
+    api.get(`/assets/portfolio/${address}`).then(res => res.data),
+
+  // Get portfolio summary with metrics
+  getPortfolioSummary: (address: string) =>
+    api.get(`/assets/portfolio/${address}/summary`).then(res => res.data),
+
+  // Get transaction history for portfolio
+  getPortfolioTransactions: (address: string, params?: { 
+    assetId?: string; 
+    type?: string; 
+    page?: number; 
+    limit?: number 
+  }) =>
+    api.get(`/assets/portfolio/${address}/transactions`, { params }).then(res => res.data),
+
+  // ========== Analytics ==========
+
+  // Get asset metrics
+  getAssetMetrics: (assetId: string, params?: { timeframe?: string }) =>
+    api.get(`/assets/${assetId}/metrics`, { params }).then(res => res.data),
+
+  // Get platform-wide asset stats
+  getPlatformStats: () =>
+    api.get('/assets/stats').then(res => res.data),
+
+  // Get fee structure
+  getFeeStructure: () =>
+    api.get('/assets/fees').then(res => res.data),
+
+  // ========== Documents ==========
+
+  // Upload document for verification
+  uploadDocument: (assetId: string, data: FormData) =>
+    api.post(`/assets/${assetId}/documents`, data, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    }).then(res => res.data),
+
+  // Get document verification status
+  getDocuments: (assetId: string) =>
+    api.get(`/assets/${assetId}/documents`).then(res => res.data),
+};
+
+// ============================================================
 // SIGNALS API
 // ============================================================
 
