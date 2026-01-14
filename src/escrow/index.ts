@@ -50,3 +50,7 @@ export {
 // Core Services
 export { VestingFactory, vestingFactory } from './VestingFactory.js';
 export { ReleaseBot, releaseBot } from './ReleaseBot.js';
+export { TokenDistributionService, getTokenDistributionService } from './TokenDistributionService.js';
+
+// Distribution Types
+export * from './distributionTypes.js';
