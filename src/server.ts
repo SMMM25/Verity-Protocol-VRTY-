@@ -65,8 +65,8 @@ if (process.env['XUMM_API_KEY'] && process.env['XUMM_API_SECRET']) {
 // Create Express app
 const app = express();
 
-// Basic configuration
-const PORT = parseInt(process.env['API_PORT'] || '3000', 10);
+// Basic configuration - PORT env var is set by Railway
+const PORT = parseInt(process.env['PORT'] || process.env['API_PORT'] || '3000', 10);
 const HOST = process.env['API_HOST'] || '0.0.0.0';
 const API_VERSION = process.env['API_VERSION'] || 'v1';
 
