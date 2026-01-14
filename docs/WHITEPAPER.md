@@ -1,6 +1,7 @@
 # Verity Protocol
 
-## The Verified Financial Operating System for XRP Ledger
+## The Platform Oversight Hub for XRP Ledger
+### Verified Financial Operating System
 
 **Version 1.0.0** | **January 2026**
 
@@ -600,23 +601,32 @@ Trade directly on XRPL's decentralized exchange:
 | 3 | AI Sentinel v1 | Q1 2026 |
 | 4 | Railway Deployment | Q1 2026 |
 | 5 | wVRTY Solana (Devnet) | Q1 2026 |
+| 6 | Fee Relayer System | Q1 2026 |
+| 7 | XRPL Escrow & Vesting | Q1 2026 |
+
+### Platform Oversight Hub Dashboards ✅
+
+| Dashboard | Status | Features |
+|-----------|--------|----------|
+| Tax Dashboard | ✅ Complete | IRS 8949, cost basis, 200+ jurisdictions |
+| Trading Dashboard | ✅ Complete | VRTY/XRP DEX, order book, portfolio |
+| Guild/DAO Dashboard | ✅ Complete | Multi-sig treasury, revenue sharing |
+| Signals Dashboard | ✅ Complete | Proof-of-engagement, reputation |
 
 ### In Progress 🔄
 
 | Phase | Milestone | Target |
 |-------|-----------|--------|
-| 6 | Token Escrow Setup | Q1 2026 |
-| 7 | XRPL DEX Listing | Q1 2026 |
-| 8 | Whitepaper Publication | Q1 2026 |
-| 9 | XRPL Grant Application | Q1 2026 |
+| 8 | Tokenized Assets Dashboard | Q1 2026 |
+| 9 | Token Escrow Setup | Q1 2026 |
+| 10 | XRPL DEX Listing | Q1 2026 |
 
 ### Planned 📋
 
 | Phase | Milestone | Target |
 |-------|-----------|--------|
-| 10 | MVP Frontend Launch | Q2 2026 |
-| 11 | Mobile Applications | Q2 2026 |
-| 12 | wVRTY Solana Mainnet | Q2 2026 |
+| 11 | wVRTY Solana Mainnet | Q2 2026 |
+| 12 | Mobile Applications | Q2 2026 |
 | 13 | Enterprise Features | Q3 2026 |
 | 14 | Full Platform Launch | Q4 2026 |
 
