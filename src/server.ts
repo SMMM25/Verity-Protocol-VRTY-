@@ -21,6 +21,7 @@ import {
   corsOptionsMiddleware,
 } from './api/middleware.js';
 import { initializeXummAuth } from './api/middleware/xummAuth.js';
+import { maintenanceModeMiddleware, isMaintenanceMode } from './api/middleware/maintenance.js';
 import { connectDatabase, disconnectDatabase, checkDatabaseHealth } from './db/index.js';
 import { logger } from './utils/logger.js';
 
@@ -96,6 +97,9 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(requestIdMiddleware);
 app.use(requestLoggerMiddleware);
 
+// Maintenance mode - must be before other routes
+app.use(maintenanceModeMiddleware);
+
 // Rate limiting
 app.use(rateLimitMiddleware);
 
@@ -157,6 +161,7 @@ const server = app.listen(PORT, HOST, () => {
 ║   Server running on http://${HOST}:${PORT}                       ║
 ║   API Version: ${API_VERSION}                                          ║
 ║   Environment: ${process.env['NODE_ENV'] || 'development'}                           ║
+║   Maintenance Mode: ${isMaintenanceMode() ? 'ENABLED' : 'disabled'}                              ║
 ║                                                               ║
 ║   Endpoints:                                                  ║
 ║   - API:     http://${HOST}:${PORT}/api/${API_VERSION}                   ║

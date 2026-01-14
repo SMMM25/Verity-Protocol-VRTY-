@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Verity Protocol - Coming Soon</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #6366f1;
+            --primary-dark: #4f46e5;
+            --secondary: #10b981;
+            --accent: #f59e0b;
+            --dark: #1e1b4b;
+            --darker: #0f0d24;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            background: linear-gradient(135deg, var(--darker) 0%, var(--dark) 50%, #1a1744 100%);
+            min-height: 100vh;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+        
+        .glass-card {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 1.5rem;
+        }
+        
+        .glow-border {
+            box-shadow: 0 0 40px rgba(99, 102, 241, 0.3), 
+                        inset 0 0 30px rgba(99, 102, 241, 0.1);
+        }
+        
+        .glow-text {
+            text-shadow: 0 0 20px rgba(99, 102, 241, 0.5);
+        }
+        
+        .animate-pulse-slow {
+            animation: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+        
+        .animate-float {
+            animation: float 6s ease-in-out infinite;
+        }
+        
+        @keyframes float {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-20px); }
+        }
+        
+        .gradient-text {
+            background: linear-gradient(135deg, #6366f1 0%, #10b981 50%, #f59e0b 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .particle {
+            position: absolute;
+            width: 4px;
+            height: 4px;
+            background: rgba(99, 102, 241, 0.5);
+            border-radius: 50%;
+            animation: rise 10s infinite;
+        }
+        
+        @keyframes rise {
+            0% {
+                transform: translateY(100vh) scale(0);
+                opacity: 0;
+            }
+            10% {
+                opacity: 1;
+            }
+            90% {
+                opacity: 1;
+            }
+            100% {
+                transform: translateY(-100vh) scale(1);
+                opacity: 0;
+            }
+        }
+        
+        .construction-icon {
+            animation: rotate 20s linear infinite;
+        }
+        
+        @keyframes rotate {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        
+        .progress-bar {
+            background: linear-gradient(90deg, var(--primary) 0%, var(--secondary) 50%, var(--accent) 100%);
+            background-size: 200% 100%;
+            animation: shimmer 2s linear infinite;
+        }
+        
+        @keyframes shimmer {
+            0% { background-position: -200% 0; }
+            100% { background-position: 200% 0; }
+        }
+
+        .social-icon {
+            transition: all 0.3s ease;
+        }
+        
+        .social-icon:hover {
+            transform: translateY(-3px);
+            color: var(--primary);
+        }
+    </style>
+</head>
+<body>
+    <!-- Animated particles background -->
+    <div id="particles" class="fixed inset-0 pointer-events-none"></div>
+    
+    <!-- Main content -->
+    <div class="relative z-10 text-center px-6 max-w-4xl mx-auto">
+        <!-- Logo and Title -->
+        <div class="animate-float mb-8">
+            <div class="inline-flex items-center justify-center w-32 h-32 rounded-full glass-card glow-border mb-6">
+                <i class="fas fa-shield-halved text-6xl text-indigo-400"></i>
+            </div>
+        </div>
+        
+        <h1 class="text-5xl md:text-7xl font-bold text-white mb-4 glow-text">
+            VERITY
+        </h1>
+        <h2 class="text-2xl md:text-3xl font-semibold gradient-text mb-6">
+            PROTOCOL
+        </h2>
+        
+        <!-- Tagline -->
+        <p class="text-xl md:text-2xl text-gray-300 mb-8">
+            The Verified Financial Operating System for XRP Ledger
+        </p>
+        
+        <!-- Under Construction Card -->
+        <div class="glass-card glow-border p-8 md:p-12 mb-8">
+            <div class="flex items-center justify-center mb-6">
+                <i class="fas fa-hard-hat text-4xl text-amber-400 mr-4 animate-pulse-slow"></i>
+                <h3 class="text-2xl md:text-3xl font-bold text-white">
+                    Under Construction
+                </h3>
+                <i class="fas fa-tools text-4xl text-amber-400 ml-4 animate-pulse-slow"></i>
+            </div>
+            
+            <p class="text-gray-300 text-lg mb-8 max-w-2xl mx-auto">
+                We're building something revolutionary for the XRP ecosystem. 
+                Our team is working hard to bring you the most advanced 
+                tokenization and compliance platform on XRP Ledger.
+            </p>
+            
+            <!-- Progress indicator -->
+            <div class="mb-8">
+                <div class="flex justify-between text-sm text-gray-400 mb-2">
+                    <span>Development Progress</span>
+                    <span>85%</span>
+                </div>
+                <div class="w-full h-3 bg-gray-800 rounded-full overflow-hidden">
+                    <div class="progress-bar h-full rounded-full" style="width: 85%"></div>
+                </div>
+            </div>
+            
+            <!-- Features preview -->
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+                <div class="p-4 rounded-lg bg-white/5">
+                    <i class="fas fa-coins text-2xl text-indigo-400 mb-2"></i>
+                    <p class="text-sm text-gray-300">VRTY Token</p>
+                </div>
+                <div class="p-4 rounded-lg bg-white/5">
+                    <i class="fas fa-gavel text-2xl text-green-400 mb-2"></i>
+                    <p class="text-sm text-gray-300">Governance</p>
+                </div>
+                <div class="p-4 rounded-lg bg-white/5">
+                    <i class="fas fa-bridge text-2xl text-blue-400 mb-2"></i>
+                    <p class="text-sm text-gray-300">Cross-Chain</p>
+                </div>
+                <div class="p-4 rounded-lg bg-white/5">
+                    <i class="fas fa-shield-alt text-2xl text-amber-400 mb-2"></i>
+                    <p class="text-sm text-gray-300">Compliance</p>
+                </div>
+            </div>
+            
+            <!-- Launch date -->
+            <div class="inline-flex items-center px-6 py-3 rounded-full bg-indigo-600/20 border border-indigo-500/30">
+                <i class="fas fa-rocket text-indigo-400 mr-3"></i>
+                <span class="text-indigo-300 font-semibold">Launching Q1 2026</span>
+            </div>
+        </div>
+        
+        <!-- Newsletter / Contact -->
+        <div class="glass-card p-6 mb-8">
+            <h4 class="text-lg font-semibold text-white mb-4">
+                <i class="fas fa-bell mr-2 text-indigo-400"></i>
+                Get Notified When We Launch
+            </h4>
+            <div class="flex flex-col md:flex-row gap-4 justify-center items-center">
+                <input 
+                    type="email" 
+                    placeholder="Enter your email" 
+                    class="w-full md:w-80 px-4 py-3 rounded-lg bg-white/10 border border-white/20 text-white placeholder-gray-400 focus:outline-none focus:border-indigo-500"
+                    disabled
+                >
+                <button 
+                    class="w-full md:w-auto px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg transition-all opacity-50 cursor-not-allowed"
+                    disabled
+                >
+                    Coming Soon
+                </button>
+            </div>
+        </div>
+        
+        <!-- Social links -->
+        <div class="flex justify-center gap-6 mb-8">
+            <a href="https://twitter.com/verityprotocol" target="_blank" class="social-icon text-gray-400 text-2xl">
+                <i class="fab fa-twitter"></i>
+            </a>
+            <a href="https://discord.gg/verityprotocol" target="_blank" class="social-icon text-gray-400 text-2xl">
+                <i class="fab fa-discord"></i>
+            </a>
+            <a href="https://github.com/SMMM25/Verity-Protocol-VRTY-" target="_blank" class="social-icon text-gray-400 text-2xl">
+                <i class="fab fa-github"></i>
+            </a>
+            <a href="https://t.me/verityprotocol" target="_blank" class="social-icon text-gray-400 text-2xl">
+                <i class="fab fa-telegram"></i>
+            </a>
+        </div>
+        
+        <!-- Footer -->
+        <p class="text-gray-500 text-sm">
+            &copy; 2026 Verity Protocol. All rights reserved.
+        </p>
+    </div>
+    
+    <script>
+        // Create floating particles
+        function createParticles() {
+            const container = document.getElementById('particles');
+            const particleCount = 50;
+            
+            for (let i = 0; i < particleCount; i++) {
+                const particle = document.createElement('div');
+                particle.className = 'particle';
+                particle.style.left = Math.random() * 100 + '%';
+                particle.style.animationDelay = Math.random() * 10 + 's';
+                particle.style.animationDuration = (Math.random() * 10 + 10) + 's';
+                particle.style.width = (Math.random() * 4 + 2) + 'px';
+                particle.style.height = particle.style.width;
+                container.appendChild(particle);
+            }
+        }
+        
+        createParticles();
+    </script>
+</body>
+</html>
