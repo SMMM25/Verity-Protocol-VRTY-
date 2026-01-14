@@ -1,3 +1,9 @@
+/**
+ * Verity Protocol - Tokenized Assets Dashboard
+ * Comprehensive RWA tokenization platform with XLS-39D compliance
+ * Phase: Assets Dashboard Enhancement
+ */
+
 import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useUser } from '../App';
@@ -21,33 +27,37 @@ import {
   List,
   ChevronRight,
   ExternalLink,
-  Percent,
   DollarSign,
   Landmark,
-  FileCheck,
   Globe,
   Lock,
   PieChart,
-  Activity,
   Wallet,
   ArrowUpRight,
   ArrowDownRight,
   RefreshCw,
   Eye,
   FileText,
-  Calendar,
-  MapPin,
   Star,
   Layers,
+  UserPlus,
 } from 'lucide-react';
 import type {
   TokenizedAsset,
   PortfolioHolding,
-  DividendDistribution,
 } from '../types/assets';
 import { AssetType, AssetStatus, ComplianceStatus } from '../types/assets';
 
-// Demo data for showcase mode
+// Import enhanced components
+import IssuanceWizard from '../components/assets/IssuanceWizard';
+import WhitelistManager from '../components/assets/WhitelistManager';
+import DividendTracker from '../components/assets/DividendTracker';
+import ComplianceDisplay from '../components/assets/ComplianceDisplay';
+
+// ============================================================
+// DEMO DATA
+// ============================================================
+
 const DEMO_ASSETS: TokenizedAsset[] = [
   {
     id: 'asset_001',
@@ -359,38 +369,6 @@ const DEMO_PORTFOLIO: PortfolioHolding[] = [
   },
 ];
 
-const DEMO_DIVIDENDS: DividendDistribution[] = [
-  {
-    id: 'div_001',
-    assetId: 'asset_001',
-    totalAmount: '2175000',
-    currency: 'XRP',
-    amountPerToken: '0.29',
-    recordDate: '2025-12-31T00:00:00Z',
-    paymentDate: '2026-01-15T00:00:00Z',
-    status: 'SCHEDULED',
-    dividendType: 'REGULAR',
-    eligibleHolders: 1247,
-    totalEligibleTokens: '7500000',
-    taxWithholdingRate: 0.15,
-  },
-  {
-    id: 'div_002',
-    assetId: 'asset_003',
-    totalAmount: '903125',
-    currency: 'XRP',
-    amountPerToken: '0.01063',
-    recordDate: '2025-12-15T00:00:00Z',
-    paymentDate: '2025-12-20T00:00:00Z',
-    status: 'COMPLETED',
-    dividendType: 'REGULAR',
-    eligibleHolders: 5823,
-    totalEligibleTokens: '85000000',
-    paidAt: '2025-12-20T00:00:00Z',
-    transactionHash: '0xabc123...def456',
-  },
-];
-
 const DEMO_STATS = {
   totalAssetsTokenized: 5,
   totalValueLocked: 857250000,
@@ -400,7 +378,10 @@ const DEMO_STATS = {
   averageDividendYield: 4.06,
 };
 
-// Asset type configuration
+// ============================================================
+// CONSTANTS
+// ============================================================
+
 const ASSET_TYPE_CONFIG: Record<AssetType, { icon: typeof Building2; color: string; bgColor: string; label: string }> = {
   [AssetType.REAL_ESTATE]: { icon: Building2, color: 'text-blue-600', bgColor: 'bg-blue-100', label: 'Real Estate' },
   [AssetType.PRIVATE_EQUITY]: { icon: Briefcase, color: 'text-purple-600', bgColor: 'bg-purple-100', label: 'Private Equity' },
@@ -412,7 +393,10 @@ const ASSET_TYPE_CONFIG: Record<AssetType, { icon: typeof Building2; color: stri
   [AssetType.INFRASTRUCTURE]: { icon: Layers, color: 'text-indigo-600', bgColor: 'bg-indigo-100', label: 'Infrastructure' },
 };
 
-// Status badge component
+// ============================================================
+// HELPER COMPONENTS
+// ============================================================
+
 function StatusBadge({ status }: { status: AssetStatus | ComplianceStatus }) {
   const configs: Record<string, { color: string; bgColor: string; icon: typeof CheckCircle2 }> = {
     [AssetStatus.ACTIVE]: { color: 'text-green-700', bgColor: 'bg-green-100', icon: CheckCircle2 },
@@ -437,7 +421,6 @@ function StatusBadge({ status }: { status: AssetStatus | ComplianceStatus }) {
   );
 }
 
-// Format currency
 function formatCurrency(value: number, decimals: number = 0): string {
   if (value >= 1000000000) return `$${(value / 1000000000).toFixed(2)}B`;
   if (value >= 1000000) return `$${(value / 1000000).toFixed(2)}M`;
@@ -445,12 +428,10 @@ function formatCurrency(value: number, decimals: number = 0): string {
   return `$${value.toFixed(decimals)}`;
 }
 
-// Format number with commas
 function formatNumber(value: number): string {
   return value.toLocaleString('en-US');
 }
 
-// Price change component
 function PriceChange({ value }: { value: number }) {
   const isPositive = value >= 0;
   const Icon = isPositive ? ArrowUpRight : ArrowDownRight;
@@ -463,9 +444,16 @@ function PriceChange({ value }: { value: number }) {
   );
 }
 
-// View mode type
+// ============================================================
+// DASHBOARD TABS TYPE
+// ============================================================
+
+type DashboardTab = 'marketplace' | 'portfolio' | 'dividends' | 'whitelist' | 'compliance' | 'issuance';
 type ViewMode = 'grid' | 'list';
-type DashboardTab = 'marketplace' | 'portfolio' | 'dividends' | 'issuance';
+
+// ============================================================
+// MAIN COMPONENT
+// ============================================================
 
 export default function AssetsDashboard() {
   const { user } = useUser();
@@ -480,6 +468,7 @@ export default function AssetsDashboard() {
   const [sortBy, setSortBy] = useState<'value' | 'yield' | 'holders' | 'recent'>('value');
   const [showFilters, setShowFilters] = useState(false);
   const [selectedAsset, setSelectedAsset] = useState<TokenizedAsset | null>(null);
+  const [showIssuanceWizard, setShowIssuanceWizard] = useState(false);
 
   // Queries (disabled in demo mode)
   const { data: assetsData } = useQuery({
@@ -507,13 +496,11 @@ export default function AssetsDashboard() {
   const assets: TokenizedAsset[] = isDemo ? DEMO_ASSETS : (assetsData?.data || []);
   const portfolio: PortfolioHolding[] = isDemo ? DEMO_PORTFOLIO : (portfolioData?.data || []);
   const stats = isDemo ? DEMO_STATS : (statsData?.data || {});
-  const dividends: DividendDistribution[] = isDemo ? DEMO_DIVIDENDS : [];
 
   // Filter and sort assets
   const filteredAssets = useMemo((): TokenizedAsset[] => {
     let filtered: TokenizedAsset[] = assets;
 
-    // Search filter
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
       filtered = filtered.filter(asset => 
@@ -523,17 +510,14 @@ export default function AssetsDashboard() {
       );
     }
 
-    // Type filter
     if (selectedType !== 'all') {
       filtered = filtered.filter(asset => asset.assetType === selectedType);
     }
 
-    // Status filter
     if (selectedStatus !== 'all') {
       filtered = filtered.filter(asset => asset.status === selectedStatus);
     }
 
-    // Sort
     filtered = [...filtered].sort((a, b) => {
       switch (sortBy) {
         case 'value':
@@ -561,6 +545,426 @@ export default function AssetsDashboard() {
     }), { totalValue: 0, totalGain: 0, totalDividends: 0 });
   }, [portfolio]);
 
+  // Get first asset for management tabs (or selected)
+  const managedAsset = selectedAsset || assets[0];
+
+  // ============================================================
+  // RENDER MARKETPLACE
+  // ============================================================
+
+  const renderMarketplace = () => (
+    <div className="space-y-6">
+      {/* Search and Filters */}
+      <div className="bg-white rounded-xl border border-gray-200 p-4">
+        <div className="flex flex-col md:flex-row gap-4">
+          <div className="flex-1 relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search assets by name, symbol, or description..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+            />
+          </div>
+
+          <div className="flex items-center gap-2 border border-gray-300 rounded-lg p-1">
+            <button
+              onClick={() => setViewMode('grid')}
+              className={`p-2 rounded ${viewMode === 'grid' ? 'bg-indigo-100 text-indigo-600' : 'text-gray-500 hover:bg-gray-100'}`}
+            >
+              <LayoutGrid className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => setViewMode('list')}
+              className={`p-2 rounded ${viewMode === 'list' ? 'bg-indigo-100 text-indigo-600' : 'text-gray-500 hover:bg-gray-100'}`}
+            >
+              <List className="w-4 h-4" />
+            </button>
+          </div>
+
+          <button
+            onClick={() => setShowFilters(!showFilters)}
+            className={`flex items-center gap-2 px-4 py-2.5 border rounded-lg transition-colors ${
+              showFilters ? 'border-indigo-600 bg-indigo-50 text-indigo-600' : 'border-gray-300 text-gray-700 hover:bg-gray-50'
+            }`}
+          >
+            <Filter className="w-4 h-4" />
+            Filters
+          </button>
+        </div>
+
+        {showFilters && (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4 pt-4 border-t border-gray-200">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Asset Type</label>
+              <select
+                value={selectedType}
+                onChange={(e) => setSelectedType(e.target.value as AssetType | 'all')}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+              >
+                <option value="all">All Types</option>
+                {Object.entries(ASSET_TYPE_CONFIG).map(([type, config]) => (
+                  <option key={type} value={type}>{config.label}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+              <select
+                value={selectedStatus}
+                onChange={(e) => setSelectedStatus(e.target.value as AssetStatus | 'all')}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+              >
+                <option value="all">All Statuses</option>
+                {Object.values(AssetStatus).map(status => (
+                  <option key={status} value={status}>{status.replace(/_/g, ' ')}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Sort By</label>
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+              >
+                <option value="value">Total Value</option>
+                <option value="yield">Dividend Yield</option>
+                <option value="holders">Number of Holders</option>
+                <option value="recent">Most Recent</option>
+              </select>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Results */}
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-gray-600">
+          Showing <span className="font-medium">{filteredAssets.length}</span> assets
+        </p>
+        <button className="flex items-center gap-1 text-sm text-indigo-600 hover:text-indigo-700">
+          <RefreshCw className="w-4 h-4" />
+          Refresh
+        </button>
+      </div>
+
+      {/* Asset Grid */}
+      {viewMode === 'grid' ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {filteredAssets.map(asset => {
+            const typeConfig = ASSET_TYPE_CONFIG[asset.assetType];
+            const TypeIcon = typeConfig?.icon || Coins;
+            
+            return (
+              <div
+                key={asset.id}
+                onClick={() => setSelectedAsset(asset)}
+                className="bg-white rounded-xl border border-gray-200 overflow-hidden hover:shadow-lg transition-all cursor-pointer group"
+              >
+                <div className="p-5 border-b border-gray-100">
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className={`p-2.5 rounded-xl ${typeConfig?.bgColor || 'bg-gray-100'}`}>
+                        <TypeIcon className={`w-6 h-6 ${typeConfig?.color || 'text-gray-600'}`} />
+                      </div>
+                      <div>
+                        <h3 className="font-semibold text-gray-900 group-hover:text-indigo-600 transition-colors">
+                          {asset.name}
+                        </h3>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <span className="text-sm font-mono text-gray-500">{asset.symbol}</span>
+                          {asset.isVerified && (
+                            <CheckCircle2 className="w-4 h-4 text-green-500" />
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    <ChevronRight className="w-5 h-5 text-gray-400 group-hover:text-indigo-600 transition-colors" />
+                  </div>
+                </div>
+
+                <div className="p-5 space-y-4">
+                  <div className="flex items-end justify-between">
+                    <div>
+                      <div className="text-xs text-gray-500 mb-1">Token Price</div>
+                      <div className="text-xl font-bold text-gray-900">
+                        ${asset.financials?.tokenPriceUSD?.toFixed(2) || '0.00'}
+                      </div>
+                    </div>
+                    <PriceChange value={asset.financials?.priceChange24h || 0} />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="bg-gray-50 rounded-lg p-3">
+                      <div className="text-xs text-gray-500 mb-1">Market Cap</div>
+                      <div className="font-semibold text-gray-900">
+                        {formatCurrency(asset.financials?.marketCapUSD || 0)}
+                      </div>
+                    </div>
+                    <div className="bg-gray-50 rounded-lg p-3">
+                      <div className="text-xs text-gray-500 mb-1">Dividend Yield</div>
+                      <div className="font-semibold text-gray-900">
+                        {asset.financials?.dividendYield?.toFixed(2) || '0.00'}%
+                      </div>
+                    </div>
+                    <div className="bg-gray-50 rounded-lg p-3">
+                      <div className="text-xs text-gray-500 mb-1">Holders</div>
+                      <div className="font-semibold text-gray-900">
+                        {formatNumber(asset.holders?.totalHolders || 0)}
+                      </div>
+                    </div>
+                    <div className="bg-gray-50 rounded-lg p-3">
+                      <div className="text-xs text-gray-500 mb-1">24h Volume</div>
+                      <div className="font-semibold text-gray-900">
+                        {formatCurrency(asset.financials?.volume24hUSD || 0)}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 pt-2">
+                    <StatusBadge status={asset.status} />
+                    <StatusBadge status={asset.complianceStatus} />
+                  </div>
+
+                  {asset.jurisdictions && asset.jurisdictions.length > 0 && (
+                    <div className="flex items-center gap-1.5 pt-1">
+                      <Globe className="w-4 h-4 text-gray-400" />
+                      <span className="text-xs text-gray-500">
+                        {asset.jurisdictions.slice(0, 4).join(', ')}
+                        {asset.jurisdictions.length > 4 && ` +${asset.jurisdictions.length - 4}`}
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                <div className={`px-5 py-3 ${asset.tradingInfo?.tradingEnabled ? 'bg-green-50' : 'bg-gray-50'}`}>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      {asset.tradingInfo?.tradingEnabled ? (
+                        <>
+                          <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                          <span className="text-xs font-medium text-green-700">Trading Active</span>
+                        </>
+                      ) : (
+                        <>
+                          <div className="w-2 h-2 rounded-full bg-gray-400" />
+                          <span className="text-xs font-medium text-gray-500">Trading Disabled</span>
+                        </>
+                      )}
+                    </div>
+                    {asset.requiresKYC && (
+                      <span className="flex items-center gap-1 text-xs text-gray-500">
+                        <Shield className="w-3.5 h-3.5" />
+                        KYC Required
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <table className="w-full">
+            <thead className="bg-gray-50 border-b border-gray-200">
+              <tr>
+                <th className="text-left px-6 py-4 text-xs font-medium text-gray-500 uppercase">Asset</th>
+                <th className="text-left px-6 py-4 text-xs font-medium text-gray-500 uppercase">Type</th>
+                <th className="text-right px-6 py-4 text-xs font-medium text-gray-500 uppercase">Price</th>
+                <th className="text-right px-6 py-4 text-xs font-medium text-gray-500 uppercase">24h</th>
+                <th className="text-right px-6 py-4 text-xs font-medium text-gray-500 uppercase">Market Cap</th>
+                <th className="text-right px-6 py-4 text-xs font-medium text-gray-500 uppercase">Yield</th>
+                <th className="text-right px-6 py-4 text-xs font-medium text-gray-500 uppercase">Holders</th>
+                <th className="text-center px-6 py-4 text-xs font-medium text-gray-500 uppercase">Status</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-200">
+              {filteredAssets.map(asset => {
+                const typeConfig = ASSET_TYPE_CONFIG[asset.assetType];
+                const TypeIcon = typeConfig?.icon || Coins;
+                
+                return (
+                  <tr
+                    key={asset.id}
+                    onClick={() => setSelectedAsset(asset)}
+                    className="hover:bg-gray-50 cursor-pointer transition-colors"
+                  >
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-3">
+                        <div className={`p-2 rounded-lg ${typeConfig?.bgColor || 'bg-gray-100'}`}>
+                          <TypeIcon className={`w-5 h-5 ${typeConfig?.color || 'text-gray-600'}`} />
+                        </div>
+                        <div>
+                          <div className="font-medium text-gray-900 flex items-center gap-1.5">
+                            {asset.name}
+                            {asset.isVerified && <CheckCircle2 className="w-4 h-4 text-green-500" />}
+                          </div>
+                          <div className="text-sm text-gray-500 font-mono">{asset.symbol}</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${typeConfig?.bgColor} ${typeConfig?.color}`}>
+                        {typeConfig?.label || asset.assetType}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-right font-medium text-gray-900">
+                      ${asset.financials?.tokenPriceUSD?.toFixed(2) || '0.00'}
+                    </td>
+                    <td className="px-6 py-4 text-right">
+                      <PriceChange value={asset.financials?.priceChange24h || 0} />
+                    </td>
+                    <td className="px-6 py-4 text-right font-medium text-gray-900">
+                      {formatCurrency(asset.financials?.marketCapUSD || 0)}
+                    </td>
+                    <td className="px-6 py-4 text-right font-medium text-gray-900">
+                      {asset.financials?.dividendYield?.toFixed(2) || '0.00'}%
+                    </td>
+                    <td className="px-6 py-4 text-right text-gray-700">
+                      {formatNumber(asset.holders?.totalHolders || 0)}
+                    </td>
+                    <td className="px-6 py-4 text-center">
+                      <StatusBadge status={asset.status} />
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+
+  // ============================================================
+  // RENDER PORTFOLIO
+  // ============================================================
+
+  const renderPortfolio = () => (
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="p-2 bg-indigo-100 rounded-lg">
+              <Wallet className="w-5 h-5 text-indigo-600" />
+            </div>
+            <span className="text-sm font-medium text-gray-500">Total Value</span>
+          </div>
+          <div className="text-2xl font-bold text-gray-900">
+            {formatCurrency(portfolioTotals.totalValue)}
+          </div>
+        </div>
+        <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <div className="flex items-center gap-3 mb-3">
+            <div className={`p-2 rounded-lg ${portfolioTotals.totalGain >= 0 ? 'bg-green-100' : 'bg-red-100'}`}>
+              {portfolioTotals.totalGain >= 0 ? (
+                <TrendingUp className="w-5 h-5 text-green-600" />
+              ) : (
+                <TrendingDown className="w-5 h-5 text-red-600" />
+              )}
+            </div>
+            <span className="text-sm font-medium text-gray-500">Unrealized P/L</span>
+          </div>
+          <div className={`text-2xl font-bold ${portfolioTotals.totalGain >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+            {portfolioTotals.totalGain >= 0 ? '+' : ''}{formatCurrency(portfolioTotals.totalGain)}
+          </div>
+        </div>
+        <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="p-2 bg-green-100 rounded-lg">
+              <DollarSign className="w-5 h-5 text-green-600" />
+            </div>
+            <span className="text-sm font-medium text-gray-500">Dividends Received</span>
+          </div>
+          <div className="text-2xl font-bold text-green-600">
+            +{formatCurrency(portfolioTotals.totalDividends)}
+          </div>
+        </div>
+        <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="p-2 bg-purple-100 rounded-lg">
+              <PieChart className="w-5 h-5 text-purple-600" />
+            </div>
+            <span className="text-sm font-medium text-gray-500">Holdings</span>
+          </div>
+          <div className="text-2xl font-bold text-gray-900">{portfolio.length} Assets</div>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-200">
+          <h2 className="text-lg font-semibold text-gray-900">My Holdings</h2>
+        </div>
+        <div className="divide-y divide-gray-200">
+          {portfolio.map(holding => {
+            const asset = holding.asset;
+            const typeConfig = asset ? ASSET_TYPE_CONFIG[asset.assetType] : null;
+            const TypeIcon = typeConfig?.icon || Coins;
+            
+            return (
+              <div
+                key={holding.assetId}
+                className="p-6 hover:bg-gray-50 transition-colors cursor-pointer"
+                onClick={() => asset && setSelectedAsset(asset)}
+              >
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-4">
+                    <div className={`p-3 rounded-xl ${typeConfig?.bgColor || 'bg-gray-100'}`}>
+                      <TypeIcon className={`w-6 h-6 ${typeConfig?.color || 'text-gray-600'}`} />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                        {asset?.name || 'Unknown Asset'}
+                        {asset?.isVerified && <CheckCircle2 className="w-4 h-4 text-green-500" />}
+                      </h3>
+                      <div className="flex items-center gap-3 mt-1">
+                        <span className="text-sm text-gray-500 font-mono">{asset?.symbol}</span>
+                        <span className="text-sm text-gray-500">
+                          Balance: <span className="font-medium text-gray-700">{formatNumber(Number(holding.balance))}</span>
+                        </span>
+                        {Number(holding.lockedBalance) > 0 && (
+                          <span className="flex items-center gap-1 text-sm text-amber-600">
+                            <Lock className="w-3.5 h-3.5" />
+                            {formatNumber(Number(holding.lockedBalance))} locked
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-xl font-bold text-gray-900">
+                      {formatCurrency(holding.currentValue)}
+                    </div>
+                    <div className={`flex items-center justify-end gap-1 mt-1 ${
+                      holding.unrealizedGain >= 0 ? 'text-green-600' : 'text-red-600'
+                    }`}>
+                      {holding.unrealizedGain >= 0 ? (
+                        <ArrowUpRight className="w-4 h-4" />
+                      ) : (
+                        <ArrowDownRight className="w-4 h-4" />
+                      )}
+                      <span className="text-sm font-medium">
+                        {holding.unrealizedGain >= 0 ? '+' : ''}{formatCurrency(holding.unrealizedGain)}
+                        ({holding.unrealizedGainPercent.toFixed(2)}%)
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+
+  // ============================================================
+  // MAIN RENDER
+  // ============================================================
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
@@ -586,17 +990,19 @@ export default function AssetsDashboard() {
           </div>
 
           {/* Tab Navigation */}
-          <div className="flex gap-1 mt-6 border-b border-gray-200 -mb-px">
+          <div className="flex gap-1 mt-6 border-b border-gray-200 -mb-px overflow-x-auto">
             {[
               { id: 'marketplace', label: 'Marketplace', icon: LayoutGrid },
               { id: 'portfolio', label: 'My Portfolio', icon: Wallet },
               { id: 'dividends', label: 'Dividends', icon: DollarSign },
+              { id: 'whitelist', label: 'Whitelist', icon: UserPlus },
+              { id: 'compliance', label: 'Compliance', icon: Shield },
               { id: 'issuance', label: 'Issue Asset', icon: Plus },
             ].map(tab => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id as DashboardTab)}
-                className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
                   activeTab === tab.id
                     ? 'border-indigo-600 text-indigo-600'
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
@@ -644,764 +1050,157 @@ export default function AssetsDashboard() {
 
       {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Marketplace Tab */}
-        {activeTab === 'marketplace' && (
-          <div className="space-y-6">
-            {/* Search and Filters */}
-            <div className="bg-white rounded-xl border border-gray-200 p-4">
-              <div className="flex flex-col md:flex-row gap-4">
-                {/* Search */}
-                <div className="flex-1 relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                  <input
-                    type="text"
-                    placeholder="Search assets by name, symbol, or description..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                  />
-                </div>
-
-                {/* View Toggle */}
-                <div className="flex items-center gap-2 border border-gray-300 rounded-lg p-1">
-                  <button
-                    onClick={() => setViewMode('grid')}
-                    className={`p-2 rounded ${viewMode === 'grid' ? 'bg-indigo-100 text-indigo-600' : 'text-gray-500 hover:bg-gray-100'}`}
-                  >
-                    <LayoutGrid className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => setViewMode('list')}
-                    className={`p-2 rounded ${viewMode === 'list' ? 'bg-indigo-100 text-indigo-600' : 'text-gray-500 hover:bg-gray-100'}`}
-                  >
-                    <List className="w-4 h-4" />
-                  </button>
-                </div>
-
-                {/* Filter Toggle */}
+        {activeTab === 'marketplace' && renderMarketplace()}
+        {activeTab === 'portfolio' && renderPortfolio()}
+        {activeTab === 'dividends' && managedAsset && (
+          <DividendTracker asset={managedAsset} isDemo={isDemo} />
+        )}
+        {activeTab === 'whitelist' && managedAsset && (
+          <WhitelistManager asset={managedAsset} isDemo={isDemo} />
+        )}
+        {activeTab === 'compliance' && managedAsset && (
+          <ComplianceDisplay asset={managedAsset} isDemo={isDemo} />
+        )}
+        {activeTab === 'issuance' && (
+          showIssuanceWizard ? (
+            <IssuanceWizard
+              onComplete={(assetId) => {
+                console.log('Asset created:', assetId);
+                setShowIssuanceWizard(false);
+                setActiveTab('marketplace');
+              }}
+              onCancel={() => setShowIssuanceWizard(false)}
+            />
+          ) : (
+            <div className="space-y-6">
+              {/* Issuance Header */}
+              <div className="bg-gradient-to-r from-indigo-500 to-purple-600 rounded-xl p-8 text-white">
+                <h2 className="text-2xl font-bold mb-2">Tokenize Real-World Assets</h2>
+                <p className="text-indigo-100 max-w-2xl">
+                  Launch your own tokenized asset on XRPL with built-in compliance, investor whitelisting, 
+                  and automated dividend distribution. Starting at just 0.25% tokenization fee.
+                </p>
                 <button
-                  onClick={() => setShowFilters(!showFilters)}
-                  className={`flex items-center gap-2 px-4 py-2.5 border rounded-lg transition-colors ${
-                    showFilters ? 'border-indigo-600 bg-indigo-50 text-indigo-600' : 'border-gray-300 text-gray-700 hover:bg-gray-50'
-                  }`}
+                  onClick={() => setShowIssuanceWizard(true)}
+                  className="mt-6 px-6 py-3 bg-white text-indigo-600 font-semibold rounded-xl hover:bg-indigo-50 transition-colors"
                 >
-                  <Filter className="w-4 h-4" />
-                  Filters
+                  Start Issuance Wizard
                 </button>
               </div>
 
-              {/* Expanded Filters */}
-              {showFilters && (
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4 pt-4 border-t border-gray-200">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Asset Type</label>
-                    <select
-                      value={selectedType}
-                      onChange={(e) => setSelectedType(e.target.value as AssetType | 'all')}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                    >
-                      <option value="all">All Types</option>
-                      {Object.entries(ASSET_TYPE_CONFIG).map(([type, config]) => (
-                        <option key={type} value={type}>{config.label}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
-                    <select
-                      value={selectedStatus}
-                      onChange={(e) => setSelectedStatus(e.target.value as AssetStatus | 'all')}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                    >
-                      <option value="all">All Statuses</option>
-                      {Object.values(AssetStatus).map(status => (
-                        <option key={status} value={status}>{status.replace(/_/g, ' ')}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Sort By</label>
-                    <select
-                      value={sortBy}
-                      onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                    >
-                      <option value="value">Total Value</option>
-                      <option value="yield">Dividend Yield</option>
-                      <option value="holders">Number of Holders</option>
-                      <option value="recent">Most Recent</option>
-                    </select>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Results Count */}
-            <div className="flex items-center justify-between">
-              <p className="text-sm text-gray-600">
-                Showing <span className="font-medium">{filteredAssets.length}</span> assets
-              </p>
-              <button className="flex items-center gap-1 text-sm text-indigo-600 hover:text-indigo-700">
-                <RefreshCw className="w-4 h-4" />
-                Refresh
-              </button>
-            </div>
-
-            {/* Asset Grid/List */}
-            {viewMode === 'grid' ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {filteredAssets.map(asset => {
-                  const typeConfig = ASSET_TYPE_CONFIG[asset.assetType];
-                  const TypeIcon = typeConfig?.icon || Coins;
+              {/* Asset Type Selection Preview */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                {[
+                  {
+                    type: 'REAL_ESTATE',
+                    title: 'Real Estate',
+                    description: 'Tokenize properties, REITs, and real estate funds',
+                    features: ['Fractional ownership', 'Rental income distribution', 'Property management'],
+                    icon: Building2,
+                    color: 'blue',
+                  },
+                  {
+                    type: 'PRIVATE_EQUITY',
+                    title: 'Private Equity',
+                    description: 'Tokenize company shares and investment funds',
+                    features: ['Equity representation', 'Cap table management', 'Exit proceeds'],
+                    icon: Briefcase,
+                    color: 'purple',
+                  },
+                  {
+                    type: 'SECURITY',
+                    title: 'Securities',
+                    description: 'Bonds, notes, and regulated securities',
+                    features: ['Coupon payments', 'Maturity tracking', 'Rating integration'],
+                    icon: Landmark,
+                    color: 'green',
+                  },
+                  {
+                    type: 'COMMUNITY',
+                    title: 'Community Token',
+                    description: 'Governance and utility tokens',
+                    features: ['No KYC required', 'Governance voting', 'Utility features'],
+                    icon: Users,
+                    color: 'orange',
+                  },
+                ].map(option => {
+                  const colorClasses = {
+                    blue: { bg: 'bg-blue-50', border: 'border-blue-200', icon: 'text-blue-600', iconBg: 'bg-blue-100' },
+                    purple: { bg: 'bg-purple-50', border: 'border-purple-200', icon: 'text-purple-600', iconBg: 'bg-purple-100' },
+                    green: { bg: 'bg-green-50', border: 'border-green-200', icon: 'text-green-600', iconBg: 'bg-green-100' },
+                    orange: { bg: 'bg-orange-50', border: 'border-orange-200', icon: 'text-orange-600', iconBg: 'bg-orange-100' },
+                  };
+                  const colors = colorClasses[option.color as keyof typeof colorClasses];
                   
                   return (
                     <div
-                      key={asset.id}
-                      onClick={() => setSelectedAsset(asset)}
-                      className="bg-white rounded-xl border border-gray-200 overflow-hidden hover:shadow-lg transition-all cursor-pointer group"
+                      key={option.type}
+                      onClick={() => setShowIssuanceWizard(true)}
+                      className={`${colors.bg} border-2 ${colors.border} rounded-xl p-6 cursor-pointer hover:shadow-lg transition-all`}
                     >
-                      {/* Asset Header */}
-                      <div className="p-5 border-b border-gray-100">
-                        <div className="flex items-start justify-between">
-                          <div className="flex items-center gap-3">
-                            <div className={`p-2.5 rounded-xl ${typeConfig?.bgColor || 'bg-gray-100'}`}>
-                              <TypeIcon className={`w-6 h-6 ${typeConfig?.color || 'text-gray-600'}`} />
-                            </div>
-                            <div>
-                              <h3 className="font-semibold text-gray-900 group-hover:text-indigo-600 transition-colors">
-                                {asset.name}
-                              </h3>
-                              <div className="flex items-center gap-2 mt-0.5">
-                                <span className="text-sm font-mono text-gray-500">{asset.symbol}</span>
-                                {asset.isVerified && (
-                                  <CheckCircle2 className="w-4 h-4 text-green-500" />
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                          <ChevronRight className="w-5 h-5 text-gray-400 group-hover:text-indigo-600 transition-colors" />
-                        </div>
+                      <div className={`inline-flex p-3 ${colors.iconBg} rounded-xl mb-4`}>
+                        <option.icon className={`w-6 h-6 ${colors.icon}`} />
                       </div>
-
-                      {/* Asset Body */}
-                      <div className="p-5 space-y-4">
-                        {/* Price & Change */}
-                        <div className="flex items-end justify-between">
-                          <div>
-                            <div className="text-xs text-gray-500 mb-1">Token Price</div>
-                            <div className="text-xl font-bold text-gray-900">
-                              ${asset.financials?.tokenPriceUSD?.toFixed(2) || '0.00'}
-                            </div>
-                          </div>
-                          <PriceChange value={asset.financials?.priceChange24h || 0} />
-                        </div>
-
-                        {/* Metrics Grid */}
-                        <div className="grid grid-cols-2 gap-3">
-                          <div className="bg-gray-50 rounded-lg p-3">
-                            <div className="text-xs text-gray-500 mb-1">Market Cap</div>
-                            <div className="font-semibold text-gray-900">
-                              {formatCurrency(asset.financials?.marketCapUSD || 0)}
-                            </div>
-                          </div>
-                          <div className="bg-gray-50 rounded-lg p-3">
-                            <div className="text-xs text-gray-500 mb-1">Dividend Yield</div>
-                            <div className="font-semibold text-gray-900">
-                              {asset.financials?.dividendYield?.toFixed(2) || '0.00'}%
-                            </div>
-                          </div>
-                          <div className="bg-gray-50 rounded-lg p-3">
-                            <div className="text-xs text-gray-500 mb-1">Holders</div>
-                            <div className="font-semibold text-gray-900">
-                              {formatNumber(asset.holders?.totalHolders || 0)}
-                            </div>
-                          </div>
-                          <div className="bg-gray-50 rounded-lg p-3">
-                            <div className="text-xs text-gray-500 mb-1">24h Volume</div>
-                            <div className="font-semibold text-gray-900">
-                              {formatCurrency(asset.financials?.volume24hUSD || 0)}
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Status & Compliance */}
-                        <div className="flex items-center gap-2 pt-2">
-                          <StatusBadge status={asset.status} />
-                          <StatusBadge status={asset.complianceStatus} />
-                        </div>
-
-                        {/* Jurisdictions */}
-                        {asset.jurisdictions && asset.jurisdictions.length > 0 && (
-                          <div className="flex items-center gap-1.5 pt-1">
-                            <Globe className="w-4 h-4 text-gray-400" />
-                            <span className="text-xs text-gray-500">
-                              {asset.jurisdictions.slice(0, 4).join(', ')}
-                              {asset.jurisdictions.length > 4 && ` +${asset.jurisdictions.length - 4}`}
-                            </span>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Trading Status Footer */}
-                      <div className={`px-5 py-3 ${asset.tradingInfo?.tradingEnabled ? 'bg-green-50' : 'bg-gray-50'}`}>
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            {asset.tradingInfo?.tradingEnabled ? (
-                              <>
-                                <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-                                <span className="text-xs font-medium text-green-700">Trading Active</span>
-                              </>
-                            ) : (
-                              <>
-                                <div className="w-2 h-2 rounded-full bg-gray-400" />
-                                <span className="text-xs font-medium text-gray-500">Trading Disabled</span>
-                              </>
-                            )}
-                          </div>
-                          {asset.requiresKYC && (
-                            <span className="flex items-center gap-1 text-xs text-gray-500">
-                              <Shield className="w-3.5 h-3.5" />
-                              KYC Required
-                            </span>
-                          )}
-                        </div>
-                      </div>
+                      <h3 className="text-lg font-semibold text-gray-900 mb-2">{option.title}</h3>
+                      <p className="text-sm text-gray-600 mb-4">{option.description}</p>
+                      <ul className="space-y-2">
+                        {option.features.map((feature, idx) => (
+                          <li key={idx} className="flex items-center gap-2 text-sm text-gray-700">
+                            <CheckCircle2 className="w-4 h-4 text-green-500" />
+                            {feature}
+                          </li>
+                        ))}
+                      </ul>
                     </div>
                   );
                 })}
               </div>
-            ) : (
-              /* List View */
-              <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-                <table className="w-full">
-                  <thead className="bg-gray-50 border-b border-gray-200">
-                    <tr>
-                      <th className="text-left px-6 py-4 text-xs font-medium text-gray-500 uppercase tracking-wider">Asset</th>
-                      <th className="text-left px-6 py-4 text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
-                      <th className="text-right px-6 py-4 text-xs font-medium text-gray-500 uppercase tracking-wider">Price</th>
-                      <th className="text-right px-6 py-4 text-xs font-medium text-gray-500 uppercase tracking-wider">24h</th>
-                      <th className="text-right px-6 py-4 text-xs font-medium text-gray-500 uppercase tracking-wider">Market Cap</th>
-                      <th className="text-right px-6 py-4 text-xs font-medium text-gray-500 uppercase tracking-wider">Yield</th>
-                      <th className="text-right px-6 py-4 text-xs font-medium text-gray-500 uppercase tracking-wider">Holders</th>
-                      <th className="text-center px-6 py-4 text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200">
-                    {filteredAssets.map(asset => {
-                      const typeConfig = ASSET_TYPE_CONFIG[asset.assetType];
-                      const TypeIcon = typeConfig?.icon || Coins;
-                      
-                      return (
-                        <tr
-                          key={asset.id}
-                          onClick={() => setSelectedAsset(asset)}
-                          className="hover:bg-gray-50 cursor-pointer transition-colors"
-                        >
-                          <td className="px-6 py-4">
-                            <div className="flex items-center gap-3">
-                              <div className={`p-2 rounded-lg ${typeConfig?.bgColor || 'bg-gray-100'}`}>
-                                <TypeIcon className={`w-5 h-5 ${typeConfig?.color || 'text-gray-600'}`} />
-                              </div>
-                              <div>
-                                <div className="font-medium text-gray-900 flex items-center gap-1.5">
-                                  {asset.name}
-                                  {asset.isVerified && <CheckCircle2 className="w-4 h-4 text-green-500" />}
-                                </div>
-                                <div className="text-sm text-gray-500 font-mono">{asset.symbol}</div>
-                              </div>
-                            </div>
-                          </td>
-                          <td className="px-6 py-4">
-                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${typeConfig?.bgColor} ${typeConfig?.color}`}>
-                              {typeConfig?.label || asset.assetType}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 text-right font-medium text-gray-900">
-                            ${asset.financials?.tokenPriceUSD?.toFixed(2) || '0.00'}
-                          </td>
-                          <td className="px-6 py-4 text-right">
-                            <PriceChange value={asset.financials?.priceChange24h || 0} />
-                          </td>
-                          <td className="px-6 py-4 text-right font-medium text-gray-900">
-                            {formatCurrency(asset.financials?.marketCapUSD || 0)}
-                          </td>
-                          <td className="px-6 py-4 text-right font-medium text-gray-900">
-                            {asset.financials?.dividendYield?.toFixed(2) || '0.00'}%
-                          </td>
-                          <td className="px-6 py-4 text-right text-gray-700">
-                            {formatNumber(asset.holders?.totalHolders || 0)}
-                          </td>
-                          <td className="px-6 py-4 text-center">
-                            <StatusBadge status={asset.status} />
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        )}
 
-        {/* Portfolio Tab */}
-        {activeTab === 'portfolio' && (
-          <div className="space-y-6">
-            {/* Portfolio Summary Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              {/* Fee Structure */}
               <div className="bg-white rounded-xl border border-gray-200 p-6">
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="p-2 bg-indigo-100 rounded-lg">
-                    <Wallet className="w-5 h-5 text-indigo-600" />
+                <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                  <DollarSign className="w-5 h-5 text-indigo-600" />
+                  Fee Structure
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div className="p-4 bg-gray-50 rounded-lg">
+                    <div className="text-2xl font-bold text-indigo-600 mb-1">0.25%</div>
+                    <div className="text-sm font-medium text-gray-900">Tokenization Fee</div>
+                    <div className="text-xs text-gray-500 mt-1">Min $100 • Max $25,000</div>
                   </div>
-                  <span className="text-sm font-medium text-gray-500">Total Value</span>
-                </div>
-                <div className="text-2xl font-bold text-gray-900">
-                  {formatCurrency(portfolioTotals.totalValue)}
-                </div>
-              </div>
-              <div className="bg-white rounded-xl border border-gray-200 p-6">
-                <div className="flex items-center gap-3 mb-3">
-                  <div className={`p-2 rounded-lg ${portfolioTotals.totalGain >= 0 ? 'bg-green-100' : 'bg-red-100'}`}>
-                    {portfolioTotals.totalGain >= 0 ? (
-                      <TrendingUp className="w-5 h-5 text-green-600" />
-                    ) : (
-                      <TrendingDown className="w-5 h-5 text-red-600" />
-                    )}
+                  <div className="p-4 bg-gray-50 rounded-lg">
+                    <div className="text-2xl font-bold text-indigo-600 mb-1">0.1%</div>
+                    <div className="text-sm font-medium text-gray-900">Trading Fee</div>
+                    <div className="text-xs text-gray-500 mt-1">Secondary market trades</div>
                   </div>
-                  <span className="text-sm font-medium text-gray-500">Unrealized P/L</span>
-                </div>
-                <div className={`text-2xl font-bold ${portfolioTotals.totalGain >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                  {portfolioTotals.totalGain >= 0 ? '+' : ''}{formatCurrency(portfolioTotals.totalGain)}
-                </div>
-              </div>
-              <div className="bg-white rounded-xl border border-gray-200 p-6">
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="p-2 bg-green-100 rounded-lg">
-                    <DollarSign className="w-5 h-5 text-green-600" />
+                  <div className="p-4 bg-gray-50 rounded-lg">
+                    <div className="text-2xl font-bold text-indigo-600 mb-1">0.05%</div>
+                    <div className="text-sm font-medium text-gray-900">Dividend Processing</div>
+                    <div className="text-xs text-gray-500 mt-1">Per distribution event</div>
                   </div>
-                  <span className="text-sm font-medium text-gray-500">Dividends Received</span>
                 </div>
-                <div className="text-2xl font-bold text-green-600">
-                  +{formatCurrency(portfolioTotals.totalDividends)}
-                </div>
-              </div>
-              <div className="bg-white rounded-xl border border-gray-200 p-6">
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="p-2 bg-purple-100 rounded-lg">
-                    <PieChart className="w-5 h-5 text-purple-600" />
-                  </div>
-                  <span className="text-sm font-medium text-gray-500">Holdings</span>
-                </div>
-                <div className="text-2xl font-bold text-gray-900">
-                  {portfolio.length} Assets
-                </div>
-              </div>
-            </div>
-
-            {/* Holdings List */}
-            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-              <div className="px-6 py-4 border-b border-gray-200">
-                <h2 className="text-lg font-semibold text-gray-900">My Holdings</h2>
-              </div>
-              <div className="divide-y divide-gray-200">
-                {portfolio.map(holding => {
-                  const asset = holding.asset;
-                  const typeConfig = asset ? ASSET_TYPE_CONFIG[asset.assetType] : null;
-                  const TypeIcon = typeConfig?.icon || Coins;
-                  
-                  return (
-                    <div
-                      key={holding.assetId}
-                      className="p-6 hover:bg-gray-50 transition-colors cursor-pointer"
-                      onClick={() => asset && setSelectedAsset(asset)}
-                    >
-                      <div className="flex items-start justify-between">
-                        <div className="flex items-center gap-4">
-                          <div className={`p-3 rounded-xl ${typeConfig?.bgColor || 'bg-gray-100'}`}>
-                            <TypeIcon className={`w-6 h-6 ${typeConfig?.color || 'text-gray-600'}`} />
-                          </div>
-                          <div>
-                            <h3 className="font-semibold text-gray-900 flex items-center gap-2">
-                              {asset?.name || 'Unknown Asset'}
-                              {asset?.isVerified && <CheckCircle2 className="w-4 h-4 text-green-500" />}
-                            </h3>
-                            <div className="flex items-center gap-3 mt-1">
-                              <span className="text-sm text-gray-500 font-mono">{asset?.symbol}</span>
-                              <span className="text-sm text-gray-500">
-                                Balance: <span className="font-medium text-gray-700">{formatNumber(Number(holding.balance))}</span>
-                              </span>
-                              {Number(holding.lockedBalance) > 0 && (
-                                <span className="flex items-center gap-1 text-sm text-amber-600">
-                                  <Lock className="w-3.5 h-3.5" />
-                                  {formatNumber(Number(holding.lockedBalance))} locked
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <div className="text-xl font-bold text-gray-900">
-                            {formatCurrency(holding.currentValue)}
-                          </div>
-                          <div className={`flex items-center justify-end gap-1 mt-1 ${
-                            holding.unrealizedGain >= 0 ? 'text-green-600' : 'text-red-600'
-                          }`}>
-                            {holding.unrealizedGain >= 0 ? (
-                              <ArrowUpRight className="w-4 h-4" />
-                            ) : (
-                              <ArrowDownRight className="w-4 h-4" />
-                            )}
-                            <span className="text-sm font-medium">
-                              {holding.unrealizedGain >= 0 ? '+' : ''}{formatCurrency(holding.unrealizedGain)}
-                              ({holding.unrealizedGainPercent.toFixed(2)}%)
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Additional Details */}
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4 pt-4 border-t border-gray-100">
-                        <div>
-                          <div className="text-xs text-gray-500 mb-1">Cost Basis</div>
-                          <div className="font-medium text-gray-900">${holding.costBasis.toFixed(2)}/token</div>
-                        </div>
-                        <div>
-                          <div className="text-xs text-gray-500 mb-1">Current Price</div>
-                          <div className="font-medium text-gray-900">${asset?.financials?.tokenPriceUSD?.toFixed(2)}/token</div>
-                        </div>
-                        <div>
-                          <div className="text-xs text-gray-500 mb-1">Dividends Received</div>
-                          <div className="font-medium text-green-600">+{formatCurrency(holding.dividendsReceived)}</div>
-                        </div>
-                        <div>
-                          <div className="text-xs text-gray-500 mb-1">Acquired</div>
-                          <div className="font-medium text-gray-900">
-                            {new Date(holding.acquisitionDate).toLocaleDateString()}
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Vesting Info */}
-                      {holding.vestingInfo && (
-                        <div className="mt-4 p-3 bg-indigo-50 rounded-lg">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              <Clock className="w-4 h-4 text-indigo-600" />
-                              <span className="text-sm font-medium text-indigo-900">Vesting Schedule</span>
-                            </div>
-                            <div className="text-sm text-indigo-700">
-                              {formatNumber(Number(holding.vestingInfo.vestedAmount))} / {formatNumber(Number(holding.vestingInfo.totalVesting))} vested
-                            </div>
-                          </div>
-                          <div className="mt-2">
-                            <div className="w-full bg-indigo-200 rounded-full h-2">
-                              <div
-                                className="bg-indigo-600 h-2 rounded-full"
-                                style={{ width: `${(Number(holding.vestingInfo.vestedAmount) / Number(holding.vestingInfo.totalVesting)) * 100}%` }}
-                              />
-                            </div>
-                          </div>
-                          <div className="mt-2 text-xs text-indigo-600">
-                            Next vest: {formatNumber(Number(holding.vestingInfo.nextVestingAmount))} tokens on {new Date(holding.vestingInfo.nextVestingDate).toLocaleDateString()}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Dividends Tab */}
-        {activeTab === 'dividends' && (
-          <div className="space-y-6">
-            {/* Dividend Summary */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="bg-white rounded-xl border border-gray-200 p-6">
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="p-2 bg-green-100 rounded-lg">
-                    <DollarSign className="w-5 h-5 text-green-600" />
-                  </div>
-                  <span className="text-sm font-medium text-gray-500">Total Received</span>
-                </div>
-                <div className="text-2xl font-bold text-green-600">
-                  +{formatCurrency(portfolioTotals.totalDividends)}
-                </div>
-              </div>
-              <div className="bg-white rounded-xl border border-gray-200 p-6">
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="p-2 bg-blue-100 rounded-lg">
-                    <Calendar className="w-5 h-5 text-blue-600" />
-                  </div>
-                  <span className="text-sm font-medium text-gray-500">Upcoming Payments</span>
-                </div>
-                <div className="text-2xl font-bold text-gray-900">
-                  {dividends.filter(d => d.status === 'SCHEDULED').length}
-                </div>
-              </div>
-              <div className="bg-white rounded-xl border border-gray-200 p-6">
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="p-2 bg-purple-100 rounded-lg">
-                    <Percent className="w-5 h-5 text-purple-600" />
-                  </div>
-                  <span className="text-sm font-medium text-gray-500">Avg Portfolio Yield</span>
-                </div>
-                <div className="text-2xl font-bold text-gray-900">
-                  {portfolioTotals.totalValue > 0 
-                    ? ((portfolioTotals.totalDividends / portfolioTotals.totalValue) * 100).toFixed(2)
-                    : '0.00'}%
-                </div>
-              </div>
-            </div>
-
-            {/* Dividend Schedule */}
-            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-              <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-                <h2 className="text-lg font-semibold text-gray-900">Dividend Schedule</h2>
-                <span className="text-sm text-gray-500">All platforms dividends</span>
-              </div>
-              <div className="divide-y divide-gray-200">
-                {dividends.map(dividend => {
-                  const asset = assets.find(a => a.id === dividend.assetId);
-                  
-                  return (
-                    <div key={dividend.id} className="p-6">
-                      <div className="flex items-start justify-between">
-                        <div>
-                          <h3 className="font-semibold text-gray-900">{asset?.name || 'Unknown Asset'}</h3>
-                          <div className="flex items-center gap-4 mt-2">
-                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                              dividend.status === 'COMPLETED' ? 'bg-green-100 text-green-700' :
-                              dividend.status === 'SCHEDULED' ? 'bg-blue-100 text-blue-700' :
-                              'bg-gray-100 text-gray-700'
-                            }`}>
-                              {dividend.status}
-                            </span>
-                            <span className="text-sm text-gray-500">
-                              {dividend.dividendType} Dividend
-                            </span>
-                            <span className="text-sm text-gray-500">
-                              {formatNumber(dividend.eligibleHolders)} eligible holders
-                            </span>
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <div className="text-xl font-bold text-green-600">
-                            {formatNumber(Number(dividend.totalAmount))} {dividend.currency}
-                          </div>
-                          <div className="text-sm text-gray-500 mt-1">
-                            {dividend.amountPerToken} per token
-                          </div>
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4 pt-4 border-t border-gray-100">
-                        <div>
-                          <div className="text-xs text-gray-500 mb-1">Record Date</div>
-                          <div className="font-medium text-gray-900">
-                            {new Date(dividend.recordDate).toLocaleDateString()}
-                          </div>
-                        </div>
-                        <div>
-                          <div className="text-xs text-gray-500 mb-1">Payment Date</div>
-                          <div className="font-medium text-gray-900">
-                            {new Date(dividend.paymentDate).toLocaleDateString()}
-                          </div>
-                        </div>
-                        <div>
-                          <div className="text-xs text-gray-500 mb-1">Eligible Tokens</div>
-                          <div className="font-medium text-gray-900">
-                            {formatNumber(Number(dividend.totalEligibleTokens))}
-                          </div>
-                        </div>
-                        <div>
-                          <div className="text-xs text-gray-500 mb-1">Tax Withholding</div>
-                          <div className="font-medium text-gray-900">
-                            {((dividend.taxWithholdingRate || 0) * 100).toFixed(0)}%
-                          </div>
-                        </div>
+                <div className="mt-4 p-4 bg-indigo-50 rounded-lg">
+                  <div className="flex items-start gap-3">
+                    <Shield className="w-5 h-5 text-indigo-600 mt-0.5" />
+                    <div>
+                      <div className="font-medium text-indigo-900">XLS-39D Compliance Included</div>
+                      <div className="text-sm text-indigo-700 mt-1">
+                        All tokenized assets include clawback capability for regulatory compliance, 
+                        governance-approved recovery mechanisms, and full audit trail.
                       </div>
                     </div>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Issue Asset Tab */}
-        {activeTab === 'issuance' && (
-          <div className="space-y-6">
-            {/* Issuance Header */}
-            <div className="bg-gradient-to-r from-indigo-500 to-purple-600 rounded-xl p-8 text-white">
-              <h2 className="text-2xl font-bold mb-2">Tokenize Real-World Assets</h2>
-              <p className="text-indigo-100 max-w-2xl">
-                Launch your own tokenized asset on XRPL with built-in compliance, investor whitelisting, 
-                and automated dividend distribution. Starting at just 0.25% tokenization fee.
-              </p>
-            </div>
-
-            {/* Asset Type Selection */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              {[
-                {
-                  type: AssetType.REAL_ESTATE,
-                  title: 'Real Estate',
-                  description: 'Tokenize properties, REITs, and real estate funds',
-                  features: ['Fractional ownership', 'Rental income distribution', 'Property management'],
-                  icon: Building2,
-                  color: 'blue',
-                },
-                {
-                  type: AssetType.PRIVATE_EQUITY,
-                  title: 'Private Equity',
-                  description: 'Tokenize company shares and investment funds',
-                  features: ['Equity representation', 'Cap table management', 'Exit proceeds'],
-                  icon: Briefcase,
-                  color: 'purple',
-                },
-                {
-                  type: AssetType.SECURITY,
-                  title: 'Securities',
-                  description: 'Bonds, notes, and regulated securities',
-                  features: ['Coupon payments', 'Maturity tracking', 'Rating integration'],
-                  icon: Landmark,
-                  color: 'green',
-                },
-                {
-                  type: AssetType.COMMUNITY,
-                  title: 'Community Token',
-                  description: 'Governance and utility tokens',
-                  features: ['No KYC required', 'Governance voting', 'Utility features'],
-                  icon: Users,
-                  color: 'orange',
-                },
-              ].map(option => {
-                const colorClasses = {
-                  blue: { bg: 'bg-blue-50', border: 'border-blue-200', icon: 'text-blue-600', iconBg: 'bg-blue-100' },
-                  purple: { bg: 'bg-purple-50', border: 'border-purple-200', icon: 'text-purple-600', iconBg: 'bg-purple-100' },
-                  green: { bg: 'bg-green-50', border: 'border-green-200', icon: 'text-green-600', iconBg: 'bg-green-100' },
-                  orange: { bg: 'bg-orange-50', border: 'border-orange-200', icon: 'text-orange-600', iconBg: 'bg-orange-100' },
-                };
-                const colors = colorClasses[option.color as keyof typeof colorClasses];
-                
-                return (
-                  <div
-                    key={option.type}
-                    className={`${colors.bg} border-2 ${colors.border} rounded-xl p-6 cursor-pointer hover:shadow-lg transition-all`}
-                  >
-                    <div className={`inline-flex p-3 ${colors.iconBg} rounded-xl mb-4`}>
-                      <option.icon className={`w-6 h-6 ${colors.icon}`} />
-                    </div>
-                    <h3 className="text-lg font-semibold text-gray-900 mb-2">{option.title}</h3>
-                    <p className="text-sm text-gray-600 mb-4">{option.description}</p>
-                    <ul className="space-y-2">
-                      {option.features.map((feature, idx) => (
-                        <li key={idx} className="flex items-center gap-2 text-sm text-gray-700">
-                          <CheckCircle2 className="w-4 h-4 text-green-500" />
-                          {feature}
-                        </li>
-                      ))}
-                    </ul>
-                    <button className={`mt-4 w-full py-2 rounded-lg font-medium ${colors.icon} ${colors.bg} border ${colors.border} hover:opacity-80`}>
-                      Start Issuance
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* Fee Structure */}
-            <div className="bg-white rounded-xl border border-gray-200 p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                <DollarSign className="w-5 h-5 text-indigo-600" />
-                Fee Structure
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="p-4 bg-gray-50 rounded-lg">
-                  <div className="text-2xl font-bold text-indigo-600 mb-1">0.25%</div>
-                  <div className="text-sm font-medium text-gray-900">Tokenization Fee</div>
-                  <div className="text-xs text-gray-500 mt-1">Min $100 • Max $25,000</div>
-                </div>
-                <div className="p-4 bg-gray-50 rounded-lg">
-                  <div className="text-2xl font-bold text-indigo-600 mb-1">0.1%</div>
-                  <div className="text-sm font-medium text-gray-900">Trading Fee</div>
-                  <div className="text-xs text-gray-500 mt-1">Secondary market trades</div>
-                </div>
-                <div className="p-4 bg-gray-50 rounded-lg">
-                  <div className="text-2xl font-bold text-indigo-600 mb-1">0.05%</div>
-                  <div className="text-sm font-medium text-gray-900">Dividend Processing</div>
-                  <div className="text-xs text-gray-500 mt-1">Per distribution event</div>
-                </div>
-              </div>
-              <div className="mt-4 p-4 bg-indigo-50 rounded-lg">
-                <div className="flex items-start gap-3">
-                  <Shield className="w-5 h-5 text-indigo-600 mt-0.5" />
-                  <div>
-                    <div className="font-medium text-indigo-900">XLS-39D Compliance Included</div>
-                    <div className="text-sm text-indigo-700 mt-1">
-                      All tokenized assets include clawback capability for regulatory compliance, 
-                      governance-approved recovery mechanisms, and full audit trail.
-                    </div>
                   </div>
                 </div>
               </div>
             </div>
-
-            {/* Compliance Requirements */}
-            <div className="bg-white rounded-xl border border-gray-200 p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                <FileCheck className="w-5 h-5 text-indigo-600" />
-                Compliance Requirements
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <h4 className="font-medium text-gray-900 mb-3">Required Documents</h4>
-                  <ul className="space-y-2">
-                    <li className="flex items-center gap-2 text-sm text-gray-700">
-                      <CheckCircle2 className="w-4 h-4 text-green-500" />
-                      Legal opinion letter
-                    </li>
-                    <li className="flex items-center gap-2 text-sm text-gray-700">
-                      <CheckCircle2 className="w-4 h-4 text-green-500" />
-                      Asset ownership documentation
-                    </li>
-                    <li className="flex items-center gap-2 text-sm text-gray-700">
-                      <CheckCircle2 className="w-4 h-4 text-green-500" />
-                      Third-party valuation report
-                    </li>
-                    <li className="flex items-center gap-2 text-sm text-gray-700">
-                      <CheckCircle2 className="w-4 h-4 text-green-500" />
-                      Insurance documentation (if applicable)
-                    </li>
-                  </ul>
-                </div>
-                <div>
-                  <h4 className="font-medium text-gray-900 mb-3">Supported Jurisdictions</h4>
-                  <div className="flex flex-wrap gap-2">
-                    {['US', 'EU', 'UK', 'SG', 'JP', 'AU', 'CA', 'CH'].map(code => (
-                      <span key={code} className="px-3 py-1 bg-gray-100 rounded-full text-sm font-medium text-gray-700">
-                        {code}
-                      </span>
-                    ))}
-                    <span className="px-3 py-1 bg-indigo-100 rounded-full text-sm font-medium text-indigo-700">
-                      +200 more
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
+          )
         )}
       </div>
 
       {/* Asset Detail Modal */}
-      {selectedAsset && (
+      {selectedAsset && !showIssuanceWizard && activeTab !== 'dividends' && activeTab !== 'whitelist' && activeTab !== 'compliance' && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-            {/* Modal Header */}
             <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
               <div className="flex items-center gap-4">
                 <div className={`p-3 rounded-xl ${ASSET_TYPE_CONFIG[selectedAsset.assetType]?.bgColor}`}>
@@ -1429,16 +1228,11 @@ export default function AssetsDashboard() {
               </button>
             </div>
 
-            {/* Modal Content */}
             <div className="p-6 space-y-6">
-              {/* Description */}
               {selectedAsset.metadata?.description && (
-                <div>
-                  <p className="text-gray-600">{selectedAsset.metadata.description}</p>
-                </div>
+                <p className="text-gray-600">{selectedAsset.metadata.description}</p>
               )}
 
-              {/* Key Metrics */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div className="bg-gray-50 rounded-lg p-4">
                   <div className="text-xs text-gray-500 mb-1">Token Price</div>
@@ -1467,157 +1261,35 @@ export default function AssetsDashboard() {
                 </div>
               </div>
 
-              {/* Property Details (for Real Estate) */}
-              {selectedAsset.propertyDetails && (
-                <div className="bg-blue-50 rounded-xl p-6">
-                  <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                    <Building2 className="w-5 h-5 text-blue-600" />
-                    Property Details
-                  </h3>
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                    <div>
-                      <div className="text-xs text-gray-500 mb-1">Address</div>
-                      <div className="font-medium text-gray-900 flex items-center gap-1">
-                        <MapPin className="w-4 h-4 text-gray-400" />
-                        {selectedAsset.propertyDetails.address}
-                      </div>
-                    </div>
-                    <div>
-                      <div className="text-xs text-gray-500 mb-1">Property Type</div>
-                      <div className="font-medium text-gray-900">{selectedAsset.propertyDetails.propertyType}</div>
-                    </div>
-                    <div>
-                      <div className="text-xs text-gray-500 mb-1">Square Footage</div>
-                      <div className="font-medium text-gray-900">
-                        {formatNumber(selectedAsset.propertyDetails.squareFootage || 0)} sq ft
-                      </div>
-                    </div>
-                    <div>
-                      <div className="text-xs text-gray-500 mb-1">Year Built</div>
-                      <div className="font-medium text-gray-900">{selectedAsset.propertyDetails.yearBuilt}</div>
-                    </div>
-                    <div>
-                      <div className="text-xs text-gray-500 mb-1">Occupancy Rate</div>
-                      <div className="font-medium text-gray-900">{selectedAsset.propertyDetails.occupancyRate}%</div>
-                    </div>
-                    <div>
-                      <div className="text-xs text-gray-500 mb-1">Annual Rent Income</div>
-                      <div className="font-medium text-green-600">
-                        {formatCurrency(selectedAsset.propertyDetails.annualRentIncome || 0)}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Compliance Info */}
-              <div className="bg-gray-50 rounded-xl p-6">
-                <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                  <Shield className="w-5 h-5 text-indigo-600" />
-                  Compliance & Governance
-                </h3>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <div className="flex items-center gap-2">
-                    {selectedAsset.requiresKYC ? (
-                      <CheckCircle2 className="w-5 h-5 text-green-500" />
-                    ) : (
-                      <XCircle className="w-5 h-5 text-gray-400" />
-                    )}
-                    <span className="text-sm text-gray-700">KYC Required</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {selectedAsset.enableClawback ? (
-                      <CheckCircle2 className="w-5 h-5 text-green-500" />
-                    ) : (
-                      <XCircle className="w-5 h-5 text-gray-400" />
-                    )}
-                    <span className="text-sm text-gray-700">XLS-39D Clawback</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {selectedAsset.isVerified ? (
-                      <CheckCircle2 className="w-5 h-5 text-green-500" />
-                    ) : (
-                      <Clock className="w-5 h-5 text-yellow-500" />
-                    )}
-                    <span className="text-sm text-gray-700">Verified Asset</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <StatusBadge status={selectedAsset.complianceStatus} />
-                  </div>
-                </div>
-                {selectedAsset.jurisdictions && selectedAsset.jurisdictions.length > 0 && (
-                  <div className="mt-4 pt-4 border-t border-gray-200">
-                    <div className="text-xs text-gray-500 mb-2">Supported Jurisdictions</div>
-                    <div className="flex flex-wrap gap-2">
-                      {selectedAsset.jurisdictions.map(j => (
-                        <span key={j} className="px-2 py-1 bg-white rounded text-sm font-medium text-gray-700 border border-gray-200">
-                          {j}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Trading Info */}
-              {selectedAsset.tradingInfo && (
-                <div className={`rounded-xl p-6 ${selectedAsset.tradingInfo.tradingEnabled ? 'bg-green-50' : 'bg-gray-50'}`}>
-                  <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                    <Activity className="w-5 h-5 text-green-600" />
-                    Trading Information
-                  </h3>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <div>
-                      <div className="text-xs text-gray-500 mb-1">Trading Status</div>
-                      <div className="flex items-center gap-2">
-                        {selectedAsset.tradingInfo.tradingEnabled ? (
-                          <>
-                            <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-                            <span className="font-medium text-green-700">Active</span>
-                          </>
-                        ) : (
-                          <>
-                            <div className="w-2 h-2 rounded-full bg-gray-400" />
-                            <span className="font-medium text-gray-500">Disabled</span>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                    <div>
-                      <div className="text-xs text-gray-500 mb-1">Trading Pair</div>
-                      <div className="font-medium text-gray-900">{selectedAsset.tradingInfo.tradingPair || 'N/A'}</div>
-                    </div>
-                    <div>
-                      <div className="text-xs text-gray-500 mb-1">Min Order</div>
-                      <div className="font-medium text-gray-900">{selectedAsset.tradingInfo.minOrderSize || 'N/A'}</div>
-                    </div>
-                    <div>
-                      <div className="text-xs text-gray-500 mb-1">24h Volume</div>
-                      <div className="font-medium text-gray-900">
-                        {formatCurrency(selectedAsset.financials?.volume24hUSD || 0)}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Action Buttons */}
+              {/* Quick Actions */}
               <div className="flex gap-4 pt-4 border-t border-gray-200">
                 {selectedAsset.tradingInfo?.tradingEnabled && (
-                  <button className="flex-1 py-3 px-4 bg-indigo-600 text-white font-medium rounded-xl hover:bg-indigo-700 transition-colors flex items-center justify-center gap-2">
+                  <button className="flex-1 py-3 px-4 bg-indigo-600 text-white font-medium rounded-xl hover:bg-indigo-700 flex items-center justify-center gap-2">
                     <TrendingUp className="w-5 h-5" />
                     Trade {selectedAsset.symbol}
                   </button>
                 )}
-                <button className="flex-1 py-3 px-4 border border-gray-300 text-gray-700 font-medium rounded-xl hover:bg-gray-50 transition-colors flex items-center justify-center gap-2">
-                  <ExternalLink className="w-5 h-5" />
-                  View on Explorer
+                <button
+                  onClick={() => {
+                    setActiveTab('dividends');
+                    // Keep selectedAsset set for the component
+                  }}
+                  className="flex-1 py-3 px-4 border border-gray-300 text-gray-700 font-medium rounded-xl hover:bg-gray-50 flex items-center justify-center gap-2"
+                >
+                  <DollarSign className="w-5 h-5" />
+                  View Dividends
                 </button>
-                {selectedAsset.metadata?.website && (
-                  <button className="py-3 px-4 border border-gray-300 text-gray-700 font-medium rounded-xl hover:bg-gray-50 transition-colors">
-                    <Globe className="w-5 h-5" />
-                  </button>
-                )}
+                <button
+                  onClick={() => {
+                    setActiveTab('compliance');
+                  }}
+                  className="py-3 px-4 border border-gray-300 text-gray-700 font-medium rounded-xl hover:bg-gray-50"
+                >
+                  <Shield className="w-5 h-5" />
+                </button>
+                <button className="py-3 px-4 border border-gray-300 text-gray-700 font-medium rounded-xl hover:bg-gray-50">
+                  <ExternalLink className="w-5 h-5" />
+                </button>
               </div>
             </div>
           </div>
