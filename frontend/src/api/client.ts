@@ -240,4 +240,58 @@ export const guildApi = {
     api.get('/guilds/health').then(res => res.data),
 };
 
+// ============================================================
+// SIGNALS API
+// ============================================================
+
+export const signalsApi = {
+  // Send signal
+  sendSignal: (data: {
+    contentNFTId: string;
+    amount: string;
+    signalType: string;
+    message?: string;
+  }) =>
+    api.post('/signals/send', data).then(res => res.data),
+
+  // Mint content NFT
+  mintContentNFT: (data: {
+    contentHash: string;
+    contentUri: string;
+    contentType: string;
+  }) =>
+    api.post('/signals/content/mint', data).then(res => res.data),
+
+  // Get content NFT details
+  getContentNFT: (tokenId: string) =>
+    api.get(`/signals/content/${tokenId}`).then(res => res.data),
+
+  // Get reputation score
+  getReputation: (wallet: string) =>
+    api.get(`/signals/reputation/${wallet}`).then(res => res.data),
+
+  // Get leaderboard
+  getLeaderboard: (params?: { limit?: number }) =>
+    api.get('/signals/leaderboard', { params }).then(res => res.data),
+
+  // Discover content
+  discover: (params?: {
+    minSignals?: number;
+    minValue?: string;
+    contentType?: string;
+    creator?: string;
+    sortBy?: 'signals' | 'value' | 'recent';
+    limit?: number;
+  }) =>
+    api.get('/signals/discover', { params }).then(res => res.data),
+
+  // Get algorithm documentation
+  getAlgorithm: () =>
+    api.get('/signals/algorithm').then(res => res.data),
+
+  // Verify signal on-chain
+  verifySignal: (signalId: string) =>
+    api.get(`/signals/verify/${signalId}`).then(res => res.data),
+};
+
 export default api;

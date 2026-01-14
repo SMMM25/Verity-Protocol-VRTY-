@@ -10,6 +10,7 @@ import TradingDashboard from './pages/TradingDashboard';
 import Portfolio from './pages/Portfolio';
 import GuildDashboard from './pages/GuildDashboard';
 import GuildDetail from './pages/GuildDetail';
+import SignalsDashboard from './pages/SignalsDashboard';
 import Landing from './pages/Landing';
 
 const queryClient = new QueryClient({
@@ -71,6 +72,8 @@ function App() {
               {/* Guild Routes */}
               <Route path="guilds" element={<GuildDashboard />} />
               <Route path="guilds/:guildId" element={<GuildDetail />} />
+              {/* Signals Routes */}
+              <Route path="signals" element={<SignalsDashboard />} />
             </Route>
           </Routes>
         </BrowserRouter>
