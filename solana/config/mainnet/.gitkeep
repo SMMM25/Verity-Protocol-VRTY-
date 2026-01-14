@@ -1,0 +1,11 @@
+# Mainnet Configuration Storage
+# =============================
+#
+# This directory stores mainnet deployment configuration.
+# Deployment info files (wvrty-mainnet-deployment.json) are safe to commit.
+#
+# Configuration files expected:
+# - wvrty-mainnet-deployment.json  (after deployment)
+#
+# This file contains public addresses and metadata only.
+# NO private keys should ever be stored in config files.

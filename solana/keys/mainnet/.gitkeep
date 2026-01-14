@@ -1,0 +1,24 @@
+# Mainnet Keypair Storage
+# ========================
+# 
+# This directory stores mainnet keypairs.
+# NEVER COMMIT ACTUAL KEYPAIR FILES TO VERSION CONTROL!
+#
+# Required files for mainnet deployment:
+# - mint-authority.json    (controls wVRTY minting)
+# - freeze-authority.json  (compliance freeze capability)
+# - treasury-authority.json (bridge treasury control)
+#
+# Generate keypairs securely using:
+#   solana-keygen new --outfile mint-authority.json
+#
+# For production, consider:
+# - Hardware wallet (Ledger)
+# - HSM (Hardware Security Module)
+# - Multi-sig setup
+#
+# Security checklist:
+# [ ] Keypairs generated on air-gapped machine
+# [ ] Private keys stored in encrypted vault
+# [ ] Backup copies in secure cold storage
+# [ ] Access logged and audited
