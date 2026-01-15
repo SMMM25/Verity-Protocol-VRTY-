@@ -61,11 +61,13 @@ WORKDIR /app
 RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 verity
 
-# Install production dependencies only
+# Install production dependencies and OpenSSL for Prisma
 RUN apk add --no-cache \
     curl \
     wget \
-    dumb-init
+    dumb-init \
+    openssl \
+    netcat-openbsd
 
 # Copy package files
 COPY package*.json ./
@@ -87,6 +89,10 @@ COPY --from=builder /app/frontend/dist ./frontend/dist
 
 # Copy necessary configuration files
 COPY tsconfig.json ./
+
+# Copy startup script
+COPY scripts/docker-entrypoint.sh ./docker-entrypoint.sh
+RUN chmod +x ./docker-entrypoint.sh
 
 # Set proper ownership
 RUN chown -R verity:nodejs /app
@@ -110,5 +116,5 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
 # Use dumb-init as PID 1 for proper signal handling
 ENTRYPOINT ["dumb-init", "--"]
 
-# Start the application
-CMD ["node", "dist/server.js"]
+# Start the application with migration support
+CMD ["./docker-entrypoint.sh"]
