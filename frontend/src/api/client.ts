@@ -899,4 +899,123 @@ export const bridgeApi = {
     api.get('/bridge/health').then(res => res.data.data),
 };
 
+// ============================================================
+// VRTY TOKEN API
+// ============================================================
+
+export interface VRTYTokenInfo {
+  token: {
+    symbol: string;
+    name: string;
+    decimals: number;
+    currencyCode: string;
+    currencyCodeHex: string;
+  };
+  supply: {
+    total: string;
+    circulating?: string;
+    distributionWalletBalance?: string;
+  };
+  addresses: {
+    issuer: string;
+    distributionWallet: string;
+  };
+  network: string;
+  explorer: {
+    token: string;
+    issuer: string;
+    distribution: string;
+  };
+  bridge?: {
+    solana: {
+      devnet: string;
+      mainnet: string;
+    };
+  };
+}
+
+export interface VRTYBalance {
+  address: string;
+  vrty: {
+    balance: string;
+    hasTrustline: boolean;
+    trustlineLimit?: string;
+  };
+  xrp: {
+    balance: string;
+  };
+  staking: {
+    tier: string;
+    tierDetails?: {
+      minStake: number;
+      maxStake: number;
+      features: string[];
+    };
+    nextTier?: {
+      name: string;
+      required: number;
+      progress: number;
+    };
+  };
+}
+
+export const vrtyApi = {
+  // Get VRTY token information
+  getTokenInfo: (): Promise<VRTYTokenInfo> =>
+    api.get('/vrty/info').then(res => res.data.data),
+
+  // Get VRTY balance for an address
+  getBalance: (address: string, network?: 'mainnet' | 'testnet'): Promise<VRTYBalance> =>
+    api.get(`/vrty/balance/${address}`, { params: { network } }).then(res => res.data.data),
+
+  // Get staking tiers
+  getStakingTiers: () =>
+    api.get('/vrty/staking-tiers').then(res => res.data.data),
+
+  // Get VRTY health status
+  getHealth: () =>
+    api.get('/vrty/health').then(res => res.data.data),
+};
+
+// ============================================================
+// AUTH API
+// ============================================================
+
+export interface XummSignInPayload {
+  payloadUuid: string;
+  qrCodeUrl: string;
+  deepLink: string;
+  websocketUrl: string;
+  expiresAt: string;
+}
+
+export interface AuthenticatedUser {
+  wallet: string;
+  network: string;
+  authenticatedAt: string;
+  expiresAt: string;
+}
+
+export const authApi = {
+  // Initiate XUMM sign-in
+  initiateXummSignIn: (): Promise<XummSignInPayload> =>
+    api.post('/auth/xumm/signin').then(res => res.data.data),
+
+  // Verify XUMM sign-in payload
+  verifyXummSignIn: (uuid: string): Promise<{ status: string; user?: AuthenticatedUser }> =>
+    api.get(`/auth/xumm/verify/${uuid}`).then(res => res.data.data),
+
+  // Logout
+  logout: () =>
+    api.post('/auth/xumm/logout').then(res => res.data),
+
+  // Get current session
+  getSession: (): Promise<AuthenticatedUser> =>
+    api.get('/auth/session').then(res => res.data.data?.user),
+
+  // Get auth status
+  getStatus: (): Promise<{ xummConfigured: boolean; developmentMode: boolean }> =>
+    api.get('/auth/status').then(res => res.data.data),
+};
+
 export default api;

@@ -6,6 +6,57 @@
 
 ---
 
+## 2026-01-15 - Claude (Genspark AI) - Simple Mode Dashboard & VRTY Token API
+
+### Summary
+Added Simple Mode Dashboard as the new main entry point for logged-in users, along with Auth Modal and VRTY Token API integration.
+
+### Work Completed
+
+1. **Simple Mode Dashboard** (`frontend/src/pages/SimpleDashboard.tsx`)
+   - New streamlined dashboard as main entry point
+   - Portfolio overview with VRTY balance display
+   - Quick actions for common operations
+   - Clean, modern UI design
+
+2. **Auth Modal** (`frontend/src/components/auth/AuthModal.tsx`)
+   - Email + optional wallet sign-up/login
+   - XUMM wallet connection support
+   - Session management
+
+3. **VRTY Token API** (`frontend/src/api/client.ts`)
+   - `vrtyApi.getTokenInfo()` - Fetch token metadata and supply
+   - `vrtyApi.getBalance(address)` - Fetch VRTY/XRP balances with staking tiers
+
+4. **GitHub Actions CI/CD** (`.github/workflows/`)
+   - `ci.yml` - Continuous Integration workflow
+   - `deploy.yml` - Deployment workflow
+
+5. **Routing Update** (`frontend/src/App.tsx`)
+   - Changed default route from `/app/tax` to `/app/dashboard`
+   - Added SimpleDashboard route
+
+### Build Status
+- ✅ Backend build: Success
+- ✅ Frontend build: Success (674.96 KB main bundle)
+- ✅ Integration tests: 56/56 passing (100%)
+- ✅ No mock code detected
+- ✅ Hub compliance verified
+
+### Files Created/Modified
+- `frontend/src/pages/SimpleDashboard.tsx` (NEW)
+- `frontend/src/components/auth/AuthModal.tsx` (NEW)
+- `frontend/src/components/auth/index.ts` (NEW)
+- `frontend/src/api/client.ts` (MODIFIED - added vrtyApi)
+- `frontend/src/App.tsx` (MODIFIED - routing)
+- `.github/workflows/ci.yml` (NEW)
+- `.github/workflows/deploy.yml` (NEW)
+
+### Commit Hash
+- b4976d6
+
+---
+
 ## 2026-01-15 - Claude (Genspark AI) - Integration Test Execution & Results
 
 ### Summary
