@@ -15,6 +15,7 @@ import AssetsDashboard from './pages/AssetsDashboard';
 import SentinelDashboard from './pages/SentinelDashboard';
 import BridgeDashboard from './pages/BridgeDashboard';
 import Landing from './pages/Landing';
+import SimpleDashboard from './pages/SimpleDashboard';
 import { ApiProvider } from './hooks/useApiWithFallback';
 
 const queryClient = new QueryClient({
@@ -79,7 +80,9 @@ function App() {
           <Routes>
             <Route path="/" element={<Landing />} />
             <Route path="/app" element={isLoggedIn ? <Layout /> : <Navigate to="/" />}>
-              <Route index element={<Navigate to="tax" replace />} />
+              <Route index element={<Navigate to="dashboard" replace />} />
+              {/* Simple Mode Dashboard - Main Entry Point */}
+              <Route path="dashboard" element={<SimpleDashboard />} />
               {/* Tax Routes */}
               <Route path="tax" element={<TaxDashboard />} />
               <Route path="tax/transactions" element={<TaxTransactions />} />
