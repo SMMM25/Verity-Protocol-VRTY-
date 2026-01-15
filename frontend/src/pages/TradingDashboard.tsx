@@ -1,3 +1,7 @@
+/**
+ * Trading Dashboard - VRTY/XRP XRPL Native DEX
+ * Polished with shared UI components
+ */
 import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { 
@@ -13,6 +17,14 @@ import {
 } from 'lucide-react';
 import { dexApi } from '../api/client';
 import type { OrderBook, OrderBookEntry, MarketStats } from '../types/dex';
+import { 
+  Card, 
+  Button, 
+  StatusBadge,
+  SkeletonOrderBook,
+  SkeletonStatCard,
+  Skeleton,
+} from '@/components/ui';
 
 // ============================================================
 // MOCK DATA (for demo before live DEX listing)
@@ -59,7 +71,7 @@ const MOCK_MARKET_STATS: MarketStats = {
 // ORDER BOOK COMPONENT
 // ============================================================
 
-function OrderBookDisplay({ orderBook }: { orderBook: OrderBook }) {
+function OrderBookDisplay({ orderBook, isLoading }: { orderBook: OrderBook; isLoading?: boolean }) {
   const maxAskTotal = useMemo(() => {
     return Math.max(...orderBook.asks.map(o => parseFloat(o.total)));
   }, [orderBook.asks]);
@@ -68,18 +80,22 @@ function OrderBookDisplay({ orderBook }: { orderBook: OrderBook }) {
     return Math.max(...orderBook.bids.map(o => parseFloat(o.total)));
   }, [orderBook.bids]);
 
+  if (isLoading) {
+    return <SkeletonOrderBook rows={5} />;
+  }
+
   return (
-    <div className="bg-gray-800 rounded-xl p-4">
+    <Card>
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-lg font-semibold text-white flex items-center gap-2">
-          <BarChart3 className="w-5 h-5 text-purple-400" />
+          <BarChart3 className="w-5 h-5 text-violet-400" />
           Order Book
         </h3>
-        <span className="text-xs text-gray-400">VRTY/XRP</span>
+        <span className="text-xs text-slate-400">VRTY/XRP</span>
       </div>
 
       {/* Header */}
-      <div className="grid grid-cols-3 text-xs text-gray-400 pb-2 border-b border-gray-700">
+      <div className="grid grid-cols-3 text-xs text-slate-400 pb-2 border-b border-slate-700">
         <span>Price (XRP)</span>
         <span className="text-right">Amount (VRTY)</span>
         <span className="text-right">Total (XRP)</span>
@@ -98,11 +114,11 @@ function OrderBookDisplay({ orderBook }: { orderBook: OrderBook }) {
       </div>
 
       {/* Spread */}
-      <div className="py-2 px-2 bg-gray-700/50 rounded flex items-center justify-between">
+      <div className="py-2 px-2 bg-slate-700/50 rounded flex items-center justify-between">
         <span className="text-white font-semibold">
           {orderBook.midPrice ? parseFloat(orderBook.midPrice).toFixed(4) : '-'}
         </span>
-        <span className="text-xs text-gray-400">
+        <span className="text-xs text-slate-400">
           Spread: {orderBook.spread?.toFixed(2) || '-'}%
         </span>
       </div>
@@ -118,7 +134,7 @@ function OrderBookDisplay({ orderBook }: { orderBook: OrderBook }) {
           />
         ))}
       </div>
-    </div>
+    </Card>
   );
 }
 
@@ -132,11 +148,11 @@ function OrderBookRow({
   maxTotal: number;
 }) {
   const percentage = (parseFloat(entry.total) / maxTotal) * 100;
-  const bgColor = side === 'ask' ? 'bg-red-500/20' : 'bg-green-500/20';
-  const textColor = side === 'ask' ? 'text-red-400' : 'text-green-400';
+  const bgColor = side === 'ask' ? 'bg-red-500/20' : 'bg-emerald-500/20';
+  const textColor = side === 'ask' ? 'text-red-400' : 'text-emerald-400';
 
   return (
-    <div className="relative grid grid-cols-3 text-sm py-1 hover:bg-gray-700/30 cursor-pointer">
+    <div className="relative grid grid-cols-3 text-sm py-1 hover:bg-slate-700/30 cursor-pointer transition-colors">
       <div
         className={`absolute inset-0 ${bgColor} transition-all`}
         style={{ width: `${percentage}%`, right: 0, left: 'auto' }}
@@ -144,10 +160,10 @@ function OrderBookRow({
       <span className={`relative z-10 ${textColor}`}>
         {parseFloat(entry.price).toFixed(4)}
       </span>
-      <span className="relative z-10 text-right text-gray-300">
+      <span className="relative z-10 text-right text-slate-300">
         {formatNumber(parseFloat(entry.amount))}
       </span>
-      <span className="relative z-10 text-right text-gray-400">
+      <span className="relative z-10 text-right text-slate-400">
         {formatNumber(parseFloat(entry.total))}
       </span>
     </div>
@@ -158,29 +174,49 @@ function OrderBookRow({
 // MARKET STATS COMPONENT
 // ============================================================
 
-function MarketStatsDisplay({ stats }: { stats: MarketStats }) {
+function MarketStatsDisplay({ stats, isLoading }: { stats: MarketStats; isLoading?: boolean }) {
   const priceChange = parseFloat(stats.changePercent24h || '0');
   const isPositive = priceChange >= 0;
   const xrpPrice = 0.50; // Assumed XRP/USD for display
 
+  if (isLoading) {
+    return (
+      <Card>
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <Skeleton className="h-8 w-32 mb-2" />
+            <Skeleton className="h-4 w-24" />
+          </div>
+          <div className="text-right">
+            <Skeleton className="h-10 w-24 mb-2" />
+            <Skeleton className="h-4 w-16" />
+          </div>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {[1,2,3,4].map(i => <SkeletonStatCard key={i} />)}
+        </div>
+      </Card>
+    );
+  }
+
   return (
-    <div className="bg-gray-800 rounded-xl p-4">
+    <Card>
       <div className="flex items-center justify-between mb-4">
         <div>
           <h2 className="text-2xl font-bold text-white">VRTY/XRP</h2>
-          <p className="text-sm text-gray-400">Verity Protocol</p>
+          <p className="text-sm text-slate-400">Verity Protocol</p>
         </div>
         <div className="text-right">
           <div className="text-3xl font-bold text-white">
             {parseFloat(stats.lastPrice).toFixed(4)}
           </div>
-          <div className="text-sm text-gray-400">
+          <div className="text-sm text-slate-400">
             ${(parseFloat(stats.lastPrice) * xrpPrice).toFixed(4)} USD
           </div>
         </div>
       </div>
 
-      <div className={`flex items-center gap-2 mb-4 ${isPositive ? 'text-green-400' : 'text-red-400'}`}>
+      <div className={`flex items-center gap-2 mb-4 ${isPositive ? 'text-emerald-400' : 'text-red-400'}`}>
         {isPositive ? (
           <TrendingUp className="w-5 h-5" />
         ) : (
@@ -189,41 +225,25 @@ function MarketStatsDisplay({ stats }: { stats: MarketStats }) {
         <span className="text-lg font-semibold">
           {isPositive ? '+' : ''}{priceChange.toFixed(2)}%
         </span>
-        <span className="text-sm text-gray-400">24h</span>
+        <span className="text-sm text-slate-400">24h</span>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatBox 
-          label="24h High" 
-          value={parseFloat(stats.high24h).toFixed(4)} 
-          unit="XRP" 
-        />
-        <StatBox 
-          label="24h Low" 
-          value={parseFloat(stats.low24h).toFixed(4)} 
-          unit="XRP" 
-        />
-        <StatBox 
-          label="24h Volume" 
-          value={formatNumber(parseFloat(stats.volume24h))} 
-          unit="VRTY" 
-        />
-        <StatBox 
-          label="Trades" 
-          value={stats.trades24h.toString()} 
-          unit="24h" 
-        />
+        <StatBox label="24h High" value={parseFloat(stats.high24h).toFixed(4)} unit="XRP" />
+        <StatBox label="24h Low" value={parseFloat(stats.low24h).toFixed(4)} unit="XRP" />
+        <StatBox label="24h Volume" value={formatNumber(parseFloat(stats.volume24h))} unit="VRTY" />
+        <StatBox label="Trades" value={stats.trades24h.toString()} unit="24h" />
       </div>
-    </div>
+    </Card>
   );
 }
 
 function StatBox({ label, value, unit }: { label: string; value: string; unit: string }) {
   return (
-    <div className="bg-gray-700/50 rounded-lg p-3">
-      <p className="text-xs text-gray-400 mb-1">{label}</p>
+    <div className="bg-slate-700/50 rounded-lg p-3">
+      <p className="text-xs text-slate-400 mb-1">{label}</p>
       <p className="text-lg font-semibold text-white">{value}</p>
-      <p className="text-xs text-gray-500">{unit}</p>
+      <p className="text-xs text-slate-500">{unit}</p>
     </div>
   );
 }
@@ -246,12 +266,11 @@ function OrderForm() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    // Order submission will be implemented when wallet is connected
     alert('Connect wallet to place orders. DEX listing coming soon!');
   };
 
   return (
-    <div className="bg-gray-800 rounded-xl p-4">
+    <Card>
       <h3 className="text-lg font-semibold text-white mb-4">Place Order</h3>
 
       {/* Buy/Sell Tabs */}
@@ -260,8 +279,8 @@ function OrderForm() {
           onClick={() => setSide('buy')}
           className={`flex-1 py-2 rounded-l-lg font-semibold transition-colors ${
             side === 'buy'
-              ? 'bg-green-600 text-white'
-              : 'bg-gray-700 text-gray-400 hover:bg-gray-600'
+              ? 'bg-emerald-600 text-white'
+              : 'bg-slate-700 text-slate-400 hover:bg-slate-600'
           }`}
         >
           Buy
@@ -271,7 +290,7 @@ function OrderForm() {
           className={`flex-1 py-2 rounded-r-lg font-semibold transition-colors ${
             side === 'sell'
               ? 'bg-red-600 text-white'
-              : 'bg-gray-700 text-gray-400 hover:bg-gray-600'
+              : 'bg-slate-700 text-slate-400 hover:bg-slate-600'
           }`}
         >
           Sell
@@ -286,9 +305,9 @@ function OrderForm() {
             name="orderType"
             checked={orderType === 'limit'}
             onChange={() => setOrderType('limit')}
-            className="text-purple-600"
+            className="text-violet-600 focus:ring-violet-500"
           />
-          <span className="text-sm text-gray-300">Limit</span>
+          <span className="text-sm text-slate-300">Limit</span>
         </label>
         <label className="flex items-center gap-2 cursor-pointer">
           <input
@@ -296,9 +315,9 @@ function OrderForm() {
             name="orderType"
             checked={orderType === 'market'}
             onChange={() => setOrderType('market')}
-            className="text-purple-600"
+            className="text-violet-600 focus:ring-violet-500"
           />
-          <span className="text-sm text-gray-300">Market</span>
+          <span className="text-sm text-slate-300">Market</span>
         </label>
       </div>
 
@@ -306,13 +325,13 @@ function OrderForm() {
         {/* Price Input */}
         {orderType === 'limit' && (
           <div>
-            <label className="block text-sm text-gray-400 mb-1">Price (XRP)</label>
+            <label className="block text-sm text-slate-400 mb-1">Price (XRP)</label>
             <input
               type="number"
               step="0.0001"
               value={price}
               onChange={(e) => setPrice(e.target.value)}
-              className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-purple-500"
+              className="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500"
               placeholder="0.0200"
             />
           </div>
@@ -320,13 +339,13 @@ function OrderForm() {
 
         {/* Amount Input */}
         <div>
-          <label className="block text-sm text-gray-400 mb-1">Amount (VRTY)</label>
+          <label className="block text-sm text-slate-400 mb-1">Amount (VRTY)</label>
           <input
             type="number"
             step="1"
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
-            className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-purple-500"
+            className="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500"
             placeholder="1000"
           />
           {/* Quick Amount Buttons */}
@@ -336,7 +355,7 @@ function OrderForm() {
                 key={amt}
                 type="button"
                 onClick={() => setAmount(amt)}
-                className="flex-1 py-1 text-xs bg-gray-700 text-gray-300 rounded hover:bg-gray-600 transition-colors"
+                className="flex-1 py-1 text-xs bg-slate-700 text-slate-300 rounded hover:bg-slate-600 transition-colors"
               >
                 {formatNumber(parseInt(amt))}
               </button>
@@ -345,32 +364,29 @@ function OrderForm() {
         </div>
 
         {/* Total */}
-        <div className="bg-gray-700/50 rounded-lg p-3">
+        <div className="bg-slate-700/50 rounded-lg p-3">
           <div className="flex justify-between text-sm">
-            <span className="text-gray-400">Total</span>
+            <span className="text-slate-400">Total</span>
             <span className="text-white font-semibold">{total} XRP</span>
           </div>
           <div className="flex justify-between text-xs mt-1">
-            <span className="text-gray-500">Est. USD</span>
-            <span className="text-gray-400">${(parseFloat(total) * 0.5).toFixed(2)}</span>
+            <span className="text-slate-500">Est. USD</span>
+            <span className="text-slate-400">${(parseFloat(total) * 0.5).toFixed(2)}</span>
           </div>
         </div>
 
         {/* Submit Button */}
-        <button
+        <Button
           type="submit"
-          className={`w-full py-3 rounded-lg font-semibold transition-colors flex items-center justify-center gap-2 ${
-            side === 'buy'
-              ? 'bg-green-600 hover:bg-green-700 text-white'
-              : 'bg-red-600 hover:bg-red-700 text-white'
-          }`}
+          variant={side === 'buy' ? 'primary' : 'danger'}
+          className="w-full"
         >
           <Wallet className="w-4 h-4" />
           {side === 'buy' ? 'Buy VRTY' : 'Sell VRTY'}
-        </button>
+        </Button>
 
         {/* Warning */}
-        <div className="flex items-start gap-2 text-xs text-yellow-400/80 bg-yellow-400/10 rounded-lg p-3">
+        <div className="flex items-start gap-2 text-xs text-amber-400/80 bg-amber-400/10 rounded-lg p-3">
           <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
           <span>
             Connect your XRPL wallet (Xumm/Crossmark) to place real orders. 
@@ -378,7 +394,7 @@ function OrderForm() {
           </span>
         </div>
       </form>
-    </div>
+    </Card>
   );
 }
 
@@ -387,7 +403,6 @@ function OrderForm() {
 // ============================================================
 
 function RecentTrades() {
-  // Mock recent trades
   const trades = [
     { time: '12:34:56', side: 'buy' as const, price: '0.0200', amount: '5000', total: '100.00' },
     { time: '12:33:21', side: 'sell' as const, price: '0.0199', amount: '2500', total: '49.75' },
@@ -397,17 +412,17 @@ function RecentTrades() {
   ];
 
   return (
-    <div className="bg-gray-800 rounded-xl p-4">
+    <Card>
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-lg font-semibold text-white flex items-center gap-2">
-          <Clock className="w-5 h-5 text-purple-400" />
+          <Clock className="w-5 h-5 text-violet-400" />
           Recent Trades
         </h3>
-        <span className="text-xs text-gray-400">Live (Demo)</span>
+        <StatusBadge status="ACTIVE" size="sm" />
       </div>
 
       {/* Header */}
-      <div className="grid grid-cols-4 text-xs text-gray-400 pb-2 border-b border-gray-700">
+      <div className="grid grid-cols-4 text-xs text-slate-400 pb-2 border-b border-slate-700">
         <span>Time</span>
         <span className="text-right">Price</span>
         <span className="text-right">Amount</span>
@@ -417,17 +432,17 @@ function RecentTrades() {
       {/* Trades */}
       <div className="py-2 space-y-1">
         {trades.map((trade, idx) => (
-          <div key={idx} className="grid grid-cols-4 text-sm py-1 hover:bg-gray-700/30">
-            <span className="text-gray-400">{trade.time}</span>
-            <span className={`text-right ${trade.side === 'buy' ? 'text-green-400' : 'text-red-400'}`}>
+          <div key={idx} className="grid grid-cols-4 text-sm py-1 hover:bg-slate-700/30 transition-colors">
+            <span className="text-slate-400">{trade.time}</span>
+            <span className={`text-right ${trade.side === 'buy' ? 'text-emerald-400' : 'text-red-400'}`}>
               {trade.price}
             </span>
-            <span className="text-right text-gray-300">{formatNumber(parseInt(trade.amount))}</span>
-            <span className="text-right text-gray-400">{trade.total}</span>
+            <span className="text-right text-slate-300">{formatNumber(parseInt(trade.amount))}</span>
+            <span className="text-right text-slate-400">{trade.total}</span>
           </div>
         ))}
       </div>
-    </div>
+    </Card>
   );
 }
 
@@ -437,17 +452,17 @@ function RecentTrades() {
 
 function PriceChart() {
   return (
-    <div className="bg-gray-800 rounded-xl p-4 h-64 flex flex-col">
+    <Card className="h-64 flex flex-col">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-lg font-semibold text-white flex items-center gap-2">
-          <Activity className="w-5 h-5 text-purple-400" />
+          <Activity className="w-5 h-5 text-violet-400" />
           Price Chart
         </h3>
         <div className="flex gap-2">
           {['1H', '4H', '1D', '1W'].map((tf) => (
             <button
               key={tf}
-              className="px-2 py-1 text-xs bg-gray-700 text-gray-300 rounded hover:bg-gray-600"
+              className="px-2 py-1 text-xs bg-slate-700 text-slate-300 rounded hover:bg-slate-600 transition-colors"
             >
               {tf}
             </button>
@@ -455,14 +470,14 @@ function PriceChart() {
         </div>
       </div>
       
-      <div className="flex-1 flex items-center justify-center bg-gray-700/30 rounded-lg">
-        <div className="text-center text-gray-400">
+      <div className="flex-1 flex items-center justify-center bg-slate-700/30 rounded-lg">
+        <div className="text-center text-slate-400">
           <Activity className="w-12 h-12 mx-auto mb-2 opacity-50" />
           <p className="text-sm">Chart will display live data</p>
           <p className="text-xs">after DEX listing</p>
         </div>
       </div>
-    </div>
+    </Card>
   );
 }
 
@@ -488,14 +503,14 @@ export default function TradingDashboard() {
   const [isDemo, setIsDemo] = useState(true);
 
   // Try to fetch real data, fall back to mock
-  const { data: orderBookData, refetch: refetchOrderBook } = useQuery({
+  const { data: orderBookData, isLoading: orderBookLoading, refetch: refetchOrderBook } = useQuery({
     queryKey: ['orderBook'],
     queryFn: () => dexApi.getOrderBook(),
     retry: false,
     enabled: !isDemo,
   });
 
-  const { data: statsData } = useQuery({
+  const { data: statsData, isLoading: statsLoading } = useQuery({
     queryKey: ['marketStats'],
     queryFn: () => dexApi.getMarketStats(),
     retry: false,
@@ -511,16 +526,16 @@ export default function TradingDashboard() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-white">Trading Dashboard</h1>
-          <p className="text-gray-400">XRPL Native DEX - Zero Fees</p>
+          <p className="text-slate-400">XRPL Native DEX - Zero Fees</p>
         </div>
         <div className="flex items-center gap-4">
           {/* Demo Mode Toggle */}
           <div className="flex items-center gap-2">
-            <span className="text-sm text-gray-400">Demo Mode</span>
+            <span className="text-sm text-slate-400">Demo Mode</span>
             <button
               onClick={() => setIsDemo(!isDemo)}
               className={`w-12 h-6 rounded-full transition-colors ${
-                isDemo ? 'bg-purple-600' : 'bg-gray-600'
+                isDemo ? 'bg-violet-600' : 'bg-slate-600'
               }`}
             >
               <div
@@ -530,41 +545,38 @@ export default function TradingDashboard() {
               />
             </button>
           </div>
-          <button
-            onClick={() => refetchOrderBook()}
-            className="flex items-center gap-2 px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-600 transition-colors"
-          >
+          <Button variant="secondary" onClick={() => refetchOrderBook()}>
             <RefreshCw className="w-4 h-4" />
             Refresh
-          </button>
+          </Button>
         </div>
       </div>
 
       {/* Demo Mode Banner */}
       {isDemo && (
-        <div className="bg-purple-600/20 border border-purple-500/30 rounded-xl p-4 flex items-center gap-3">
-          <AlertCircle className="w-5 h-5 text-purple-400" />
+        <Card glass className="flex items-center gap-3 border-violet-500/30">
+          <AlertCircle className="w-5 h-5 text-violet-400" />
           <div>
-            <p className="text-purple-300 font-medium">Demo Mode Active</p>
-            <p className="text-sm text-purple-400/80">
+            <p className="text-violet-300 font-medium">Demo Mode Active</p>
+            <p className="text-sm text-violet-400/80">
               Showing simulated data. Live trading will be enabled after DEX listing.
               Initial price: 0.02 XRP/VRTY (~$0.01)
             </p>
           </div>
-        </div>
+        </Card>
       )}
 
       {/* Market Stats */}
-      <MarketStatsDisplay stats={marketStats} />
+      <MarketStatsDisplay stats={marketStats} isLoading={!isDemo && statsLoading} />
 
       {/* Main Trading Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Order Book */}
         <div className="lg:col-span-1">
-          <OrderBookDisplay orderBook={orderBook} />
+          <OrderBookDisplay orderBook={orderBook} isLoading={!isDemo && orderBookLoading} />
         </div>
 
-        {/* Price Chart & Order Form */}
+        {/* Price Chart & Recent Trades */}
         <div className="lg:col-span-1 space-y-6">
           <PriceChart />
           <RecentTrades />
@@ -576,69 +588,69 @@ export default function TradingDashboard() {
         </div>
       </div>
 
-      {/* Trading Info */}
+      {/* Trading Info Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-gray-800 rounded-xl p-4">
+        <Card hover>
           <div className="flex items-center gap-2 mb-2">
-            <div className="w-8 h-8 rounded-full bg-purple-600/20 flex items-center justify-center">
-              <ArrowUpRight className="w-4 h-4 text-purple-400" />
+            <div className="w-8 h-8 rounded-full bg-violet-600/20 flex items-center justify-center">
+              <ArrowUpRight className="w-4 h-4 text-violet-400" />
             </div>
             <span className="text-white font-medium">Zero Trading Fees</span>
           </div>
-          <p className="text-sm text-gray-400">
+          <p className="text-sm text-slate-400">
             XRPL native DEX has no trading fees. Only minimal XRP network fees (~0.00001 XRP).
           </p>
-        </div>
+        </Card>
 
-        <div className="bg-gray-800 rounded-xl p-4">
+        <Card hover>
           <div className="flex items-center gap-2 mb-2">
-            <div className="w-8 h-8 rounded-full bg-green-600/20 flex items-center justify-center">
-              <Activity className="w-4 h-4 text-green-400" />
+            <div className="w-8 h-8 rounded-full bg-emerald-600/20 flex items-center justify-center">
+              <Activity className="w-4 h-4 text-emerald-400" />
             </div>
             <span className="text-white font-medium">Instant Settlement</span>
           </div>
-          <p className="text-sm text-gray-400">
+          <p className="text-sm text-slate-400">
             Trades settle in 3-5 seconds on XRPL. No waiting for confirmations.
           </p>
-        </div>
+        </Card>
 
-        <div className="bg-gray-800 rounded-xl p-4">
+        <Card hover>
           <div className="flex items-center gap-2 mb-2">
             <div className="w-8 h-8 rounded-full bg-blue-600/20 flex items-center justify-center">
               <Wallet className="w-4 h-4 text-blue-400" />
             </div>
             <span className="text-white font-medium">Non-Custodial</span>
           </div>
-          <p className="text-sm text-gray-400">
+          <p className="text-sm text-slate-400">
             Trade directly from your wallet. Your keys, your crypto. No centralized custody.
           </p>
-        </div>
+        </Card>
       </div>
 
       {/* Token Info */}
-      <div className="bg-gray-800 rounded-xl p-6">
+      <Card>
         <h3 className="text-lg font-semibold text-white mb-4">VRTY Token Information</h3>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div>
-            <p className="text-sm text-gray-400">Total Supply</p>
+            <p className="text-sm text-slate-400">Total Supply</p>
             <p className="text-lg font-semibold text-white">1,000,000,000</p>
           </div>
           <div>
-            <p className="text-sm text-gray-400">Blockchain</p>
+            <p className="text-sm text-slate-400">Blockchain</p>
             <p className="text-lg font-semibold text-white">XRPL Mainnet</p>
           </div>
           <div>
-            <p className="text-sm text-gray-400">Issuer</p>
+            <p className="text-sm text-slate-400">Issuer</p>
             <p className="text-lg font-semibold text-white font-mono text-sm truncate">
               rBeHfq9vRj...SxAH8f
             </p>
           </div>
           <div>
-            <p className="text-sm text-gray-400">Listing Status</p>
-            <p className="text-lg font-semibold text-yellow-400">Pre-Launch</p>
+            <p className="text-sm text-slate-400">Listing Status</p>
+            <StatusBadge status="PENDING" />
           </div>
         </div>
-      </div>
+      </Card>
     </div>
   );
 }
