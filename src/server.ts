@@ -30,7 +30,20 @@ config();
 
 // Initialize database connection
 async function initializeDatabase(): Promise<void> {
-  if (process.env['DATABASE_URL']) {
+  const dbUrl = process.env['DATABASE_URL'];
+  
+  // Debug: Log sanitized URL info
+  if (dbUrl) {
+    const sanitized = dbUrl.replace(/:[^@]+@/, ':***@');
+    logger.info('DATABASE_URL configured', { 
+      length: dbUrl.length,
+      preview: sanitized.substring(0, 50) + '...',
+      hasSSL: dbUrl.includes('sslmode'),
+      host: dbUrl.match(/@([^:\/]+)/)?.[1] || 'unknown'
+    });
+  }
+  
+  if (dbUrl) {
     try {
       await connectDatabase();
       const health = await checkDatabaseHealth();
@@ -38,7 +51,11 @@ async function initializeDatabase(): Promise<void> {
         logger.info(`Database connected (latency: ${health.latency}ms)`);
       }
     } catch (error) {
-      logger.warn('Database connection failed - running in memory-only mode', { error });
+      logger.warn('Database connection failed - running in memory-only mode', { 
+        error,
+        errorMessage: (error as Error).message,
+        errorName: (error as Error).name
+      });
     }
   } else {
     logger.warn('DATABASE_URL not configured - running in memory-only mode');
