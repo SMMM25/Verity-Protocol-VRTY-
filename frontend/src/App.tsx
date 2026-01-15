@@ -15,6 +15,7 @@ import AssetsDashboard from './pages/AssetsDashboard';
 import SentinelDashboard from './pages/SentinelDashboard';
 import BridgeDashboard from './pages/BridgeDashboard';
 import Landing from './pages/Landing';
+import { ApiProvider } from './hooks/useApiWithFallback';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -72,8 +73,9 @@ function App() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <UserContext.Provider value={{ userId, setUserId, isLoggedIn, login, logout, user }}>
-        <BrowserRouter>
+      <ApiProvider healthCheckUrl="/api/v1/health">
+        <UserContext.Provider value={{ userId, setUserId, isLoggedIn, login, logout, user }}>
+          <BrowserRouter>
           <Routes>
             <Route path="/" element={<Landing />} />
             <Route path="/app" element={isLoggedIn ? <Layout /> : <Navigate to="/" />}>
@@ -99,8 +101,9 @@ function App() {
               <Route path="bridge" element={<BridgeDashboard />} />
             </Route>
           </Routes>
-        </BrowserRouter>
-      </UserContext.Provider>
+          </BrowserRouter>
+        </UserContext.Provider>
+      </ApiProvider>
     </QueryClientProvider>
   );
 }

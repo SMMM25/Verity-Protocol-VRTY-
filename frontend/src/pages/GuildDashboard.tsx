@@ -1,9 +1,10 @@
 /**
  * Guild Dashboard - Multi-sig treasuries & DAO governance
  * Updated with shared UI components
+ * 
+ * API Integration: Uses live Guild API with demo fallback
  */
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import {
   Users,
@@ -19,10 +20,12 @@ import {
   AlertCircle,
   CheckCircle,
   ExternalLink,
+  Radio,
 } from 'lucide-react';
 import { guildApi } from '../api/client';
 import type { Guild, GuildStats } from '../types/guild';
 import { Card, Button } from '@/components/ui';
+import { useApiWithFallback, useApiContext, ModeToggle } from '../hooks/useApiWithFallback';
 
 // ============================================================
 // MOCK DATA (for demo)
@@ -413,27 +416,39 @@ function formatNumber(num: number): string {
 // ============================================================
 
 export default function GuildDashboard() {
-  const [isDemo] = useState(true);
+  const { isLiveMode, apiStatus } = useApiContext();
   const [searchQuery, setSearchQuery] = useState('');
   const [showCreateModal, setShowCreateModal] = useState(false);
 
-  // Fetch guilds (with demo fallback)
-  const { data: guildsData } = useQuery({
-    queryKey: ['guilds'],
-    queryFn: () => guildApi.getGuilds(),
-    retry: false,
-    enabled: !isDemo,
-  });
+  // API integration with demo fallback
+  const { 
+    data: guilds, 
+    isDemo: guildsIsDemo,
+    isLive: guildsIsLive,
+  } = useApiWithFallback(
+    ['guilds'],
+    async () => {
+      const response = await guildApi.getGuilds();
+      return response.data?.guilds || [];
+    },
+    MOCK_GUILDS
+  );
 
-  const { data: statsData } = useQuery({
-    queryKey: ['guildStats'],
-    queryFn: () => guildApi.getStats(),
-    retry: false,
-    enabled: !isDemo,
-  });
+  const { 
+    data: stats,
+    isDemo: statsIsDemo,
+    isLive: statsIsLive,
+  } = useApiWithFallback(
+    ['guildStats'],
+    async () => {
+      const response = await guildApi.getStats();
+      return response.data?.stats || MOCK_STATS;
+    },
+    MOCK_STATS
+  );
 
-  const guilds = isDemo ? MOCK_GUILDS : (guildsData?.data?.guilds || MOCK_GUILDS);
-  const stats = isDemo ? MOCK_STATS : (statsData?.data?.stats || MOCK_STATS);
+  const isDemo = guildsIsDemo || statsIsDemo;
+  const isLive = guildsIsLive && statsIsLive;
   const myGuilds = isDemo ? MOCK_MY_GUILDS : [];
 
   // Filter guilds by search
@@ -451,21 +466,41 @@ export default function GuildDashboard() {
           <h1 className="text-2xl font-bold text-white">Guilds & DAOs</h1>
           <p className="text-gray-400">Multi-signature treasuries & governance</p>
         </div>
-        <Button onClick={() => setShowCreateModal(true)}>
-          <PlusCircle className="w-5 h-5" />
-          Create Guild
-        </Button>
+        <div className="flex items-center gap-4">
+          <ModeToggle showLatency />
+          <Button onClick={() => setShowCreateModal(true)}>
+            <PlusCircle className="w-5 h-5" />
+            Create Guild
+          </Button>
+        </div>
       </div>
 
-      {/* Demo Mode Banner */}
+      {/* Mode Banner */}
       {isDemo && (
         <Card glass className="flex items-center gap-3 border-violet-500/30">
           <AlertCircle className="w-5 h-5 text-violet-400" />
           <div>
-            <p className="text-violet-300 font-medium">Demo Mode</p>
+            <p className="text-violet-300 font-medium">
+              {isLiveMode && !apiStatus.isOnline ? 'API Offline - Using Demo Data' : 'Demo Mode'}
+            </p>
             <p className="text-sm text-violet-400/80">
-              Connect wallet to view your guilds and create new ones.
-              Requires 10,000+ VRTY stake to create a guild.
+              {isLiveMode && !apiStatus.isOnline 
+                ? 'Unable to connect to live API. Showing simulated data until connection is restored.'
+                : 'Connect wallet to view your guilds and create new ones. Requires 10,000+ VRTY stake to create a guild.'}
+            </p>
+          </div>
+        </Card>
+      )}
+
+      {/* Live Data Indicator */}
+      {isLive && (
+        <Card glass className="flex items-center gap-3 border-emerald-500/30">
+          <Radio className="w-5 h-5 text-emerald-400 animate-pulse" />
+          <div>
+            <p className="text-emerald-300 font-medium">Live Data</p>
+            <p className="text-sm text-emerald-400/80">
+              Connected to Guild API. Showing real guild data.
+              {apiStatus.latency && ` Latency: ${apiStatus.latency}ms`}
             </p>
           </div>
         </Card>

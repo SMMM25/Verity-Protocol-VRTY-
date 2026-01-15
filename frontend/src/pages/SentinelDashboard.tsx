@@ -49,6 +49,7 @@ import {
 } from 'lucide-react';
 import { useUser } from '../App';
 import { sentinelApi } from '../api/client';
+import { useApiContext, ModeToggle } from '../hooks/useApiWithFallback';
 import {
   AlertSeverity,
   AlertStatus,
@@ -602,52 +603,58 @@ type DashboardTab = 'overview' | 'alerts' | 'rules' | 'guardians' | 'threats';
 export default function SentinelDashboard() {
   const { user } = useUser();
   const queryClient = useQueryClient();
+  const { isLiveMode, apiStatus } = useApiContext();
   
   // State
   const [activeTab, setActiveTab] = useState<DashboardTab>('overview');
-  const [isDemo, setIsDemo] = useState(true);
   const [selectedAlert, setSelectedAlert] = useState<SentinelAlert | null>(null);
   const [alertFilter, setAlertFilter] = useState<AlertFilter>(DEFAULT_ALERT_FILTER);
   const [searchQuery, setSearchQuery] = useState('');
   const [showActionModal, setShowActionModal] = useState(false);
   const [pendingAction, setPendingAction] = useState<{ alert: SentinelAlert; action: AlertAction } | null>(null);
 
-  // API Queries (disabled in demo mode)
-  const { data: alertsData } = useQuery({
+  // API Queries (enabled in live mode)
+  const { data: alertsData, isError: alertsError } = useQuery({
     queryKey: ['sentinel-alerts', alertFilter],
     queryFn: () => sentinelApi.getAlerts(alertFilter),
-    enabled: !isDemo
+    enabled: isLiveMode,
+    retry: 2
   });
 
-  const { data: statsData } = useQuery({
+  const { data: statsData, isError: statsError } = useQuery({
     queryKey: ['sentinel-stats'],
     queryFn: () => sentinelApi.getStats(30),
-    enabled: !isDemo
+    enabled: isLiveMode,
+    retry: 2
   });
 
   const { data: rulesData } = useQuery({
     queryKey: ['sentinel-rules'],
     queryFn: () => sentinelApi.getRules(),
-    enabled: !isDemo
+    enabled: isLiveMode,
+    retry: 2
   });
 
   const { data: guardiansData } = useQuery({
     queryKey: ['sentinel-guardians'],
     queryFn: () => sentinelApi.getGuardians(),
-    enabled: !isDemo
+    enabled: isLiveMode,
+    retry: 2
   });
 
   const { data: metricsData } = useQuery({
     queryKey: ['sentinel-metrics'],
     queryFn: () => sentinelApi.getRealTimeMetrics(),
-    enabled: !isDemo,
-    refetchInterval: 30000 // Refresh every 30 seconds
+    enabled: isLiveMode,
+    refetchInterval: 30000, // Refresh every 30 seconds
+    retry: 2
   });
 
   const { data: threatsData } = useQuery({
     queryKey: ['sentinel-threats'],
     queryFn: () => sentinelApi.getThreatClusters(),
-    enabled: !isDemo
+    enabled: isLiveMode,
+    retry: 2
   });
 
   // Mutations
@@ -669,13 +676,17 @@ export default function SentinelDashboard() {
     }
   });
 
+  // Determine if using demo data
+  const isDemo = !isLiveMode || alertsError || statsError;
+  const isLive = isLiveMode && !alertsError && !statsError && apiStatus.isOnline;
+
   // Use demo or live data
-  const alerts = isDemo ? DEMO_ALERTS : (alertsData?.alerts || []);
+  const alerts = isDemo ? DEMO_ALERTS : (alertsData?.alerts || DEMO_ALERTS);
   const stats = isDemo ? DEMO_STATS : (statsData || DEMO_STATS);
-  const rules = isDemo ? DEMO_RULES : (rulesData || []);
-  const guardians = isDemo ? DEMO_GUARDIANS : (guardiansData || []);
+  const rules = isDemo ? DEMO_RULES : (rulesData || DEMO_RULES);
+  const guardians = isDemo ? DEMO_GUARDIANS : (guardiansData || DEMO_GUARDIANS);
   const metrics = isDemo ? DEMO_METRICS : (metricsData || DEMO_METRICS);
-  const threats = isDemo ? DEMO_THREATS : (threatsData || []);
+  const threats = isDemo ? DEMO_THREATS : (threatsData || DEMO_THREATS);
 
   // Filtered alerts
   const filteredAlerts = useMemo(() => {
@@ -763,22 +774,16 @@ export default function SentinelDashboard() {
                 <span className="text-sm font-medium capitalize">{metrics.systemHealth}</span>
               </div>
               
-              {/* Demo Mode Toggle */}
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-gray-500">Demo</span>
-                <button
-                  onClick={() => setIsDemo(!isDemo)}
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                    isDemo ? 'bg-purple-600' : 'bg-gray-200'
-                  }`}
-                >
-                  <span
-                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                      isDemo ? 'translate-x-6' : 'translate-x-1'
-                    }`}
-                  />
-                </button>
-              </div>
+              {/* Live Data Indicator */}
+              {isLive && (
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-100 text-emerald-700">
+                  <Radio className="w-4 h-4 animate-pulse" />
+                  <span className="text-sm font-medium">Live</span>
+                </div>
+              )}
+              
+              {/* Live/Demo Mode Toggle */}
+              <ModeToggle />
             </div>
           </div>
           
