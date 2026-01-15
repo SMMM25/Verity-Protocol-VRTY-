@@ -224,12 +224,12 @@ router.get('/detailed', async (req: Request, res: Response) => {
  *       503:
  *         description: Service is not ready
  */
-router.get('/ready', async (req: Request, res: Response) => {
+router.get('/ready', async (req: Request, res: Response): Promise<void> => {
   try {
     const dbHealth = await checkDatabaseHealth();
     
     if (!dbHealth.connected) {
-      return res.status(503).json({
+      res.status(503).json({
         success: false,
         data: {
           status: 'not_ready',
@@ -237,6 +237,7 @@ router.get('/ready', async (req: Request, res: Response) => {
           timestamp: new Date().toISOString(),
         },
       });
+      return;
     }
 
     res.json({
@@ -307,7 +308,7 @@ router.get('/live', (req: Request, res: Response) => {
 router.get('/metrics', async (req: Request, res: Response) => {
   const memUsage = process.memoryUsage();
   const cpuUsage = process.cpuUsage();
-  const loadAvg = os.loadaverage();
+  const loadAvg = os.loadavg();
   const dbHealth = await checkDatabaseHealth();
   
   const uptimeSeconds = process.uptime();

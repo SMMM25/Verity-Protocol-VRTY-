@@ -18,7 +18,8 @@
 
 import { EventEmitter } from 'eventemitter3';
 import { Server as HttpServer } from 'http';
-import { WebSocketServer, WebSocket } from 'ws';
+import WebSocket from 'ws';
+const { Server: WebSocketServer } = WebSocket;
 import { logger } from '../utils/logger.js';
 
 // ============================================================
@@ -128,7 +129,7 @@ const CHANNELS = {
 // ============================================================
 
 export class WebSocketService extends EventEmitter {
-  private wss: WebSocketServer | null = null;
+  private wss: InstanceType<typeof WebSocketServer> | null = null;
   private clients: Map<string, ConnectedClient> = new Map();
   private walletClients: Map<string, Set<string>> = new Map(); // wallet -> clientIds
   private channelSubscribers: Map<string, Set<string>> = new Map(); // channel -> clientIds
@@ -219,16 +220,16 @@ export class WebSocketService extends EventEmitter {
   private setupEventHandlers(): void {
     if (!this.wss) return;
 
-    this.wss.on('connection', (ws, req) => {
+    this.wss.on('connection', (ws: WebSocket, req: { url: string; headers: { host?: string } }) => {
       this.handleConnection(ws, req);
     });
 
-    this.wss.on('error', (error) => {
+    this.wss.on('error', (error: Error) => {
       logger.error('WebSocket server error', { error: error.message });
     });
   }
 
-  private handleConnection(ws: WebSocket, req: any): void {
+  private handleConnection(ws: WebSocket, req: { url: string; headers: { host?: string } }): void {
     const clientId = this.generateClientId();
     
     // Parse wallet from query string if provided
@@ -265,7 +266,7 @@ export class WebSocketService extends EventEmitter {
     logger.info('Client connected', { clientId, wallet });
 
     // Setup message handler
-    ws.on('message', (data) => {
+    ws.on('message', (data: WebSocket.Data) => {
       this.handleMessage(clientId, data);
     });
 
@@ -273,7 +274,7 @@ export class WebSocketService extends EventEmitter {
       this.handleDisconnect(clientId);
     });
 
-    ws.on('error', (error) => {
+    ws.on('error', (error: Error) => {
       logger.error('Client error', { clientId, error: error.message });
     });
 
@@ -296,7 +297,7 @@ export class WebSocketService extends EventEmitter {
     });
   }
 
-  private handleMessage(clientId: string, data: any): void {
+  private handleMessage(clientId: string, data: WebSocket.Data): void {
     const client = this.clients.get(clientId);
     if (!client) return;
 

@@ -22,5 +22,18 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     sourcemap: true,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          // React core
+          'react-vendor': ['react', 'react-dom', 'react-router-dom'],
+          // UI libraries
+          'ui-vendor': ['lucide-react', 'recharts'],
+          // Date/time utilities
+          'date-vendor': ['date-fns'],
+        },
+      },
+    },
+    chunkSizeWarningLimit: 600,
   },
 })
