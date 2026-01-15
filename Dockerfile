@@ -38,10 +38,13 @@ COPY . .
 # Build the application
 RUN npm run build
 
-# Build frontend (if exists)
+# Build frontend (if exists) and ensure dist directory exists
 RUN if [ -d "frontend" ]; then \
       cd frontend && npm ci && npm run build; \
-    fi
+    fi && \
+    # Create placeholder if frontend/dist doesn't exist (for COPY to work)
+    mkdir -p /app/frontend/dist && \
+    touch /app/frontend/dist/.gitkeep
 
 # ============================================
 # Stage 3: Production Image
@@ -79,8 +82,8 @@ COPY --from=dependencies /app/prisma ./prisma
 # Copy built application
 COPY --from=builder /app/dist ./dist
 
-# Copy frontend build (if exists)
-COPY --from=builder /app/frontend/dist ./frontend/dist 2>/dev/null || true
+# Copy frontend build (directory is guaranteed to exist from builder stage)
+COPY --from=builder /app/frontend/dist ./frontend/dist
 
 # Copy necessary configuration files
 COPY tsconfig.json ./
