@@ -1,3 +1,7 @@
+/**
+ * Guild Dashboard - Multi-sig treasuries & DAO governance
+ * Updated with shared UI components
+ */
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
@@ -18,6 +22,7 @@ import {
 } from 'lucide-react';
 import { guildApi } from '../api/client';
 import type { Guild, GuildStats } from '../types/guild';
+import { Card, Button } from '@/components/ui';
 
 // ============================================================
 // MOCK DATA (for demo)
@@ -90,10 +95,8 @@ const MOCK_MY_GUILDS: Guild[] = [
 
 function GuildCard({ guild }: { guild: Guild }) {
   return (
-    <Link
-      to={`/app/guilds/${guild.id}`}
-      className="bg-gray-800 rounded-xl p-5 hover:bg-gray-750 transition-all hover:shadow-lg hover:shadow-purple-500/10 border border-gray-700 hover:border-purple-500/50"
-    >
+    <Link to={`/app/guilds/${guild.id}`} className="block">
+      <Card hover className="h-full">
       {/* Header */}
       <div className="flex items-start justify-between mb-4">
         <div className="flex items-center gap-3">
@@ -151,11 +154,12 @@ function GuildCard({ guild }: { guild: Guild }) {
         <span className="text-xs text-gray-500">
           Created {new Date(guild.createdAt).toLocaleDateString()}
         </span>
-        <span className="flex items-center gap-1 text-sm text-purple-400">
+        <span className="flex items-center gap-1 text-sm text-violet-400">
           View Guild
           <ArrowRight className="w-4 h-4" />
         </span>
       </div>
+      </Card>
     </Link>
   );
 }
@@ -207,22 +211,22 @@ function StatCard({
   color: 'purple' | 'green' | 'blue' | 'yellow';
 }) {
   const colorClasses = {
-    purple: 'bg-purple-500/20 text-purple-400',
-    green: 'bg-green-500/20 text-green-400',
+    purple: 'bg-violet-500/20 text-violet-400',
+    green: 'bg-emerald-500/20 text-emerald-400',
     blue: 'bg-blue-500/20 text-blue-400',
-    yellow: 'bg-yellow-500/20 text-yellow-400',
+    yellow: 'bg-amber-500/20 text-amber-400',
   };
 
   return (
-    <div className="bg-gray-800 rounded-xl p-4">
+    <Card>
       <div className="flex items-center gap-3 mb-2">
         <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${colorClasses[color]}`}>
           {icon}
         </div>
       </div>
       <p className="text-2xl font-bold text-white">{value}</p>
-      <p className="text-sm text-gray-400">{label}</p>
-    </div>
+      <p className="text-sm text-slate-400">{label}</p>
+    </Card>
   );
 }
 
@@ -447,27 +451,24 @@ export default function GuildDashboard() {
           <h1 className="text-2xl font-bold text-white">Guilds & DAOs</h1>
           <p className="text-gray-400">Multi-signature treasuries & governance</p>
         </div>
-        <button
-          onClick={() => setShowCreateModal(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
-        >
+        <Button onClick={() => setShowCreateModal(true)}>
           <PlusCircle className="w-5 h-5" />
           Create Guild
-        </button>
+        </Button>
       </div>
 
       {/* Demo Mode Banner */}
       {isDemo && (
-        <div className="bg-purple-600/20 border border-purple-500/30 rounded-xl p-4 flex items-center gap-3">
-          <AlertCircle className="w-5 h-5 text-purple-400" />
+        <Card glass className="flex items-center gap-3 border-violet-500/30">
+          <AlertCircle className="w-5 h-5 text-violet-400" />
           <div>
-            <p className="text-purple-300 font-medium">Demo Mode</p>
-            <p className="text-sm text-purple-400/80">
+            <p className="text-violet-300 font-medium">Demo Mode</p>
+            <p className="text-sm text-violet-400/80">
               Connect wallet to view your guilds and create new ones.
               Requires 10,000+ VRTY stake to create a guild.
             </p>
           </div>
-        </div>
+        </Card>
       )}
 
       {/* Stats Overview */}
