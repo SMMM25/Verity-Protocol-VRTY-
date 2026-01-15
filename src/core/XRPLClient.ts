@@ -174,6 +174,18 @@ export class XRPLClient extends EventEmitter {
   }
 
   /**
+   * Make a raw request to the XRPL
+   * This is a passthrough to the underlying client's request method
+   */
+  async request<T = unknown>(req: { command: string; [key: string]: unknown }): Promise<{ result: T }> {
+    if (!this.connected()) {
+      throw new Error('Not connected to XRPL. Call connect() first.');
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return this.client.request(req as any) as unknown as Promise<{ result: T }>;
+  }
+
+  /**
    * Check if connected to XRPL
    */
   connected(): boolean {

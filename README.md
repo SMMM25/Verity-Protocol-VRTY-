@@ -392,7 +392,8 @@ See **[DEVELOPMENT_ROADMAP.md](DEVELOPMENT_ROADMAP.md)** for the complete develo
 | Fee Relayer | ✅ Complete | Gasless transactions for users |
 | Escrow & Vesting | ✅ Complete | Native XRPL vesting schedules |
 | AI Sentinel | ✅ Complete | Rules-based fraud detection |
-| Cross-Chain | ⏳ Planned | Full XRPL ↔ Solana integration |
+| Cross-Chain Bridge | ✅ Complete | XRPL ↔ Solana bridging with multisig validators |
+| Production Deploy | ✅ Complete | Docker, K8s, CI/CD, monitoring |
 
 ### Platform Oversight Hub - Frontend Dashboards
 | Dashboard | Status | Features |
@@ -401,7 +402,9 @@ See **[DEVELOPMENT_ROADMAP.md](DEVELOPMENT_ROADMAP.md)** for the complete develo
 | 📈 Trading Dashboard | ✅ Complete | VRTY/XRP DEX, order book, portfolio view |
 | 🏛️ Guild/DAO Dashboard | ✅ Complete | Multi-sig treasury, member management, revenue sharing |
 | ⚡ Signals Dashboard | ✅ Complete | Proof-of-engagement, reputation system, content NFTs |
-| 🏠 Tokenized Assets | 🔜 Next | RWA tokenization, fractional ownership, compliance |
+| 🏠 Tokenized Assets | ✅ Complete | RWA tokenization, fractional ownership, compliance |
+| 🛡️ AI Sentinel | ✅ Complete | Fraud detection, guardian system, threat monitoring |
+| 🌉 Cross-Chain Bridge | ✅ Complete | VRTY ↔ wVRTY bridging, validator signatures |
 
 ### Token Distribution
 | Allocation | Percentage |

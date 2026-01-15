@@ -249,8 +249,10 @@ router.get('/orderbook', async (req: Request, res: Response) => {
       limit,
     });
 
-    const bids = aggregateOrderBook(reverseBookResult.result.offers || [], 'bid');
-    const asks = aggregateOrderBook(bookOffersResult.result.offers || [], 'ask');
+    const reverseResult = reverseBookResult.result as { offers?: unknown[] };
+    const bookResult = bookOffersResult.result as { offers?: unknown[] };
+    const bids = aggregateOrderBook(reverseResult.offers || [], 'bid');
+    const asks = aggregateOrderBook(bookResult.offers || [], 'ask');
 
     const orderBook: OrderBook = {
       bids: bids.slice(0, limit),
@@ -628,7 +630,8 @@ router.get('/orders/:account', async (req: Request, res: Response) => {
       limit: 200,
     });
 
-    const orders = (accountOffersResult.result.offers || []).map((offer: any) => {
+    const offersResult = accountOffersResult.result as { offers?: unknown[] };
+    const orders = (offersResult.offers || []).map((offer: any) => {
       const isSellingVRTY = typeof offer.taker_gets === 'object' &&
         offer.taker_gets.currency === VRTY_CURRENCY_CODE;
 

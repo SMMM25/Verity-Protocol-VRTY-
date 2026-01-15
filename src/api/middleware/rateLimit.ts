@@ -67,7 +67,9 @@ async function getUserTier(
   apiKey: string | undefined
 ): Promise<keyof typeof RATE_LIMITS> {
   // No wallet or API key = public tier
-  if (!wallet && !apiKey) return 'PUBLIC';
+  if (!wallet && !apiKey) {
+    return 'PUBLIC';
+  }
   
   const cacheKey = wallet || apiKey || '';
   
@@ -103,11 +105,17 @@ async function getUserTier(
       }
     } else if (apiKey) {
       // Fallback: API key prefix check (for backwards compatibility)
-      if (apiKey.startsWith('inst_')) tier = 'INSTITUTIONAL';
-      else if (apiKey.startsWith('pro_')) tier = 'PROFESSIONAL';
-      else if (apiKey.startsWith('dev_')) tier = 'DEVELOPER';
-      else if (apiKey.startsWith('basic_')) tier = 'BASIC';
-      else tier = 'BASIC'; // Valid API key gets at least BASIC
+      if (apiKey.startsWith('inst_')) {
+        tier = 'INSTITUTIONAL';
+      } else if (apiKey.startsWith('pro_')) {
+        tier = 'PROFESSIONAL';
+      } else if (apiKey.startsWith('dev_')) {
+        tier = 'DEVELOPER';
+      } else if (apiKey.startsWith('basic_')) {
+        tier = 'BASIC';
+      } else {
+        tier = 'BASIC'; // Valid API key gets at least BASIC
+      }
     }
   } catch (error) {
     // Database error - default to PUBLIC but don't cache
