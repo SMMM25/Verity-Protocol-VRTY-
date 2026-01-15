@@ -1,5 +1,7 @@
-// Verity Protocol - Shared UI Components
-// Export all UI components from this barrel file
+/**
+ * Verity Protocol - Shared UI Component Library
+ * Polished with Lovable.dev patterns
+ */
 
 export { StatusBadge } from './StatusBadge';
 export type { StatusType } from './StatusBadge';
@@ -13,9 +15,9 @@ export {
   CardFooter 
 } from './Card';
 
-export { Button, IconButton } from './Button';
+export { Button } from './Button';
 
-export { Modal, ConfirmModal } from './Modal';
+export { Modal } from './Modal';
 
 export { 
   Skeleton, 

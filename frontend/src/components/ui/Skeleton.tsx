@@ -1,74 +1,72 @@
-interface SkeletonProps {
+/**
+ * Skeleton Component
+ * Polished with Lovable.dev patterns - loading placeholders
+ */
+import { cn } from '@/lib/utils';
+
+interface SkeletonProps extends React.HTMLAttributes<HTMLDivElement> {
   className?: string;
-  variant?: 'default' | 'circular' | 'text';
-  animate?: boolean;
 }
 
-export function Skeleton({ 
-  className = '', 
-  variant = 'default',
-  animate = true 
-}: SkeletonProps) {
-  const baseStyles = 'bg-slate-700';
-  const animationStyles = animate ? 'animate-pulse' : '';
-  
-  const variantStyles = {
-    default: 'rounded-lg',
-    circular: 'rounded-full',
-    text: 'rounded h-4',
-  };
-
+export function Skeleton({ className, ...props }: SkeletonProps) {
   return (
-    <div 
-      className={`${baseStyles} ${animationStyles} ${variantStyles[variant]} ${className}`}
-      aria-hidden="true"
+    <div
+      className={cn('animate-pulse bg-slate-700 rounded', className)}
+      {...props}
     />
   );
 }
 
-// Pre-built skeleton components
-export function SkeletonText({ lines = 3, className = '' }: { lines?: number; className?: string }) {
+export function SkeletonText({ lines = 3, className }: { lines?: number; className?: string }) {
   return (
-    <div className={`space-y-2 ${className}`}>
+    <div className={cn('space-y-2', className)}>
       {Array.from({ length: lines }).map((_, i) => (
-        <Skeleton 
-          key={i} 
-          variant="text" 
-          className={i === lines - 1 ? 'w-2/3' : 'w-full'} 
-        />
+        <Skeleton key={i} className={cn('h-4', i === lines - 1 ? 'w-3/4' : 'w-full')} />
       ))}
     </div>
   );
 }
 
-export function SkeletonAvatar({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' }) {
-  const sizes = {
-    sm: 'w-8 h-8',
-    md: 'w-10 h-10',
-    lg: 'w-12 h-12',
-  };
-
-  return <Skeleton variant="circular" className={sizes[size]} />;
-}
-
-export function SkeletonCard({ className = '' }: { className?: string }) {
+export function SkeletonCard({ className }: { className?: string }) {
   return (
-    <div className={`bg-slate-800 rounded-xl p-6 border border-slate-700 ${className}`}>
-      <div className="flex items-start gap-4 mb-4">
-        <SkeletonAvatar />
-        <div className="flex-1">
-          <Skeleton className="h-5 w-1/3 mb-2" />
-          <Skeleton className="h-4 w-1/2" />
-        </div>
+    <div className={cn('p-6 bg-slate-800 border border-slate-700 rounded-xl', className)}>
+      <Skeleton className="h-6 w-1/3 mb-4" />
+      <SkeletonText lines={2} />
+      <div className="flex gap-2 mt-4">
+        <Skeleton className="h-8 w-20" />
+        <Skeleton className="h-8 w-20" />
       </div>
-      <SkeletonText lines={3} />
     </div>
   );
 }
 
-export function SkeletonStatCard({ className = '' }: { className?: string }) {
+export function SkeletonAvatar({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' }) {
+  const sizeClasses = { sm: 'h-8 w-8', md: 'h-10 w-10', lg: 'h-12 w-12' };
+  return <Skeleton className={cn('rounded-full', sizeClasses[size])} />;
+}
+
+export function SkeletonTable({ rows = 5, columns = 4 }: { rows?: number; columns?: number }) {
   return (
-    <div className={`bg-slate-800 rounded-xl p-6 border border-slate-700 ${className}`}>
+    <div className="space-y-3">
+      <div className="flex gap-4 pb-3 border-b border-slate-700">
+        {Array.from({ length: columns }).map((_, i) => (
+          <Skeleton key={i} className="h-4 flex-1" />
+        ))}
+      </div>
+      {Array.from({ length: rows }).map((_, rowIndex) => (
+        <div key={rowIndex} className="flex gap-4 py-2">
+          {Array.from({ length: columns }).map((_, colIndex) => (
+            <Skeleton key={colIndex} className="h-4 flex-1" />
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export function SkeletonStatCard({ className }: { className?: string }) {
+  return (
+    <div className={cn('bg-slate-800 rounded-xl p-6 border border-slate-700', className)}>
       <div className="flex items-start justify-between">
         <div className="flex-1">
           <Skeleton className="h-4 w-24 mb-2" />
@@ -76,30 +74,6 @@ export function SkeletonStatCard({ className = '' }: { className?: string }) {
         </div>
         <Skeleton className="w-10 h-10 rounded-lg" />
       </div>
-    </div>
-  );
-}
-
-export function SkeletonTable({ rows = 5, cols = 4 }: { rows?: number; cols?: number }) {
-  return (
-    <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
-      {/* Header */}
-      <div className="flex gap-4 p-4 border-b border-slate-700 bg-slate-800/50">
-        {Array.from({ length: cols }).map((_, i) => (
-          <Skeleton key={i} className="h-4 flex-1" />
-        ))}
-      </div>
-      {/* Rows */}
-      {Array.from({ length: rows }).map((_, rowIndex) => (
-        <div 
-          key={rowIndex} 
-          className="flex gap-4 p-4 border-b border-slate-700 last:border-b-0"
-        >
-          {Array.from({ length: cols }).map((_, colIndex) => (
-            <Skeleton key={colIndex} className="h-4 flex-1" />
-          ))}
-        </div>
-      ))}
     </div>
   );
 }
@@ -146,9 +120,9 @@ export function SkeletonOrderBook({ rows = 5 }: { rows?: number }) {
   );
 }
 
-export function SkeletonAssetCard({ className = '' }: { className?: string }) {
+export function SkeletonAssetCard({ className }: { className?: string }) {
   return (
-    <div className={`bg-slate-800 rounded-xl border border-slate-700 overflow-hidden ${className}`}>
+    <div className={cn('bg-slate-800 rounded-xl border border-slate-700 overflow-hidden', className)}>
       {/* Image */}
       <Skeleton className="aspect-video w-full rounded-none" />
       
