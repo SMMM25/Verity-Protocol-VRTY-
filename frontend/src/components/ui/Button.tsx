@@ -1,145 +1,58 @@
-import { forwardRef } from 'react';
+/**
+ * Button Component
+ * Polished with Lovable.dev patterns - clean variants with loading states
+ */
+import * as React from 'react';
+import { cn } from '@/lib/utils';
 import { Loader2 } from 'lucide-react';
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: 'primary' | 'secondary' | 'outline' | 'ghost' | 'danger';
   size?: 'sm' | 'md' | 'lg';
   loading?: boolean;
-  icon?: React.ElementType;
-  iconPosition?: 'left' | 'right';
-  fullWidth?: boolean;
   children: React.ReactNode;
 }
 
 const variantStyles = {
-  primary: `
-    bg-gradient-to-r from-violet-600 to-indigo-600 
-    hover:from-violet-500 hover:to-indigo-500 
-    text-white shadow-lg shadow-violet-500/25 
-    hover:shadow-violet-500/40 hover:scale-105
-    active:scale-100
-  `,
-  secondary: `
-    bg-slate-700 hover:bg-slate-600 
-    text-white border border-slate-600
-    hover:border-slate-500
-  `,
-  outline: `
-    bg-transparent border border-white/20 
-    text-white hover:bg-white/10 
-    hover:border-white/30
-  `,
-  ghost: `
-    bg-transparent text-white/70 
-    hover:text-white hover:bg-white/10
-  `,
-  danger: `
-    bg-gradient-to-r from-red-600 to-red-500 
-    hover:from-red-500 hover:to-red-400 
-    text-white shadow-lg shadow-red-500/25 
-    hover:shadow-red-500/40 hover:scale-105
-    active:scale-100
-  `,
+  primary: 'bg-gradient-to-r from-violet-600 to-indigo-600 text-white hover:from-violet-500 hover:to-indigo-500 shadow-lg shadow-violet-500/25',
+  secondary: 'bg-slate-700 text-white hover:bg-slate-600 border border-slate-600',
+  outline: 'bg-transparent border border-violet-500 text-violet-400 hover:bg-violet-500/10',
+  ghost: 'bg-transparent text-slate-300 hover:bg-slate-800 hover:text-white',
+  danger: 'bg-gradient-to-r from-red-600 to-red-500 text-white hover:from-red-500 hover:to-red-400 shadow-lg shadow-red-500/25',
 };
 
 const sizeStyles = {
-  sm: 'px-3 py-1.5 text-sm gap-1.5',
-  md: 'px-4 py-2.5 text-sm gap-2',
-  lg: 'px-6 py-3 text-base gap-2',
+  sm: 'px-3 py-1.5 text-sm rounded-lg',
+  md: 'px-4 py-2 text-sm rounded-lg',
+  lg: 'px-6 py-3 text-base rounded-xl',
 };
 
-const iconSizes = {
-  sm: 'w-4 h-4',
-  md: 'w-4 h-4',
-  lg: 'w-5 h-5',
-};
-
-export const Button = forwardRef<HTMLButtonElement, ButtonProps>(({
+export function Button({
   variant = 'primary',
   size = 'md',
   loading = false,
-  icon: Icon,
-  iconPosition = 'left',
-  fullWidth = false,
   disabled,
-  className = '',
   children,
+  className,
   ...props
-}, ref) => {
-  const isDisabled = disabled || loading;
-
+}: ButtonProps) {
   return (
     <button
-      ref={ref}
-      disabled={isDisabled}
-      className={`
-        inline-flex items-center justify-center font-medium rounded-xl
-        transition-all duration-200
-        focus:outline-none focus:ring-2 focus:ring-violet-500 focus:ring-offset-2 focus:ring-offset-slate-900
-        disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100
-        ${variantStyles[variant]}
-        ${sizeStyles[size]}
-        ${fullWidth ? 'w-full' : ''}
-        ${className}
-      `}
-      {...props}
-    >
-      {loading ? (
-        <>
-          <Loader2 className={`${iconSizes[size]} animate-spin`} />
-          <span>Loading...</span>
-        </>
-      ) : (
-        <>
-          {Icon && iconPosition === 'left' && <Icon className={iconSizes[size]} />}
-          {children}
-          {Icon && iconPosition === 'right' && <Icon className={iconSizes[size]} />}
-        </>
+      className={cn(
+        'inline-flex items-center justify-center gap-2 font-medium transition-all duration-200',
+        'focus:outline-none focus:ring-2 focus:ring-violet-500 focus:ring-offset-2 focus:ring-offset-slate-900',
+        'disabled:opacity-50 disabled:cursor-not-allowed',
+        variantStyles[variant],
+        sizeStyles[size],
+        className
       )}
-    </button>
-  );
-});
-
-Button.displayName = 'Button';
-
-// Icon-only button variant
-interface IconButtonProps extends Omit<ButtonProps, 'children' | 'icon' | 'iconPosition'> {
-  icon: React.ElementType;
-  'aria-label': string;
-}
-
-export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(({
-  variant = 'ghost',
-  size = 'md',
-  icon: Icon,
-  className = '',
-  ...props
-}, ref) => {
-  const iconOnlySizes = {
-    sm: 'w-8 h-8',
-    md: 'w-10 h-10',
-    lg: 'w-12 h-12',
-  };
-
-  return (
-    <button
-      ref={ref}
-      className={`
-        inline-flex items-center justify-center rounded-xl
-        transition-all duration-200
-        focus:outline-none focus:ring-2 focus:ring-violet-500 focus:ring-offset-2 focus:ring-offset-slate-900
-        disabled:opacity-50 disabled:cursor-not-allowed
-        ${variantStyles[variant]}
-        ${iconOnlySizes[size]}
-        ${className}
-      `}
+      disabled={disabled || loading}
       {...props}
     >
-      <Icon className={iconSizes[size]} />
+      {loading && <Loader2 className="h-4 w-4 animate-spin" />}
+      {children}
     </button>
   );
-});
-
-IconButton.displayName = 'IconButton';
+}
 
 export default Button;
