@@ -29,9 +29,11 @@ import {
   Server,
   Network,
   Layers,
-  History
+  History,
+  Radio
 } from 'lucide-react';
 import { bridgeApi } from '../api/client';
+import { useApiContext, ModeToggle } from '../hooks/useApiWithFallback';
 import {
   BridgeStatus,
   BridgeDirection,
@@ -1252,16 +1254,27 @@ const NetworkTab: React.FC<NetworkTabProps> = ({ health, chains, isLoading }) =>
 const BridgeDashboard: React.FC = () => {
   const queryClient = useQueryClient();
   const { user } = useUser();
+  const { isLiveMode, apiStatus } = useApiContext();
   const [activeTab, setActiveTab] = useState<TabId>('bridge');
   const [selectedTransaction, setSelectedTransaction] = useState<BridgeTransaction | null>(null);
+
+  // Track if we're using demo data
+  const [usingDemoData, setUsingDemoData] = useState(false);
 
   // Fetch supported chains
   const { data: chainsData, isLoading: chainsLoading } = useQuery({
     queryKey: ['bridge-chains'],
     queryFn: async () => {
+      if (!isLiveMode) {
+        setUsingDemoData(true);
+        return { chains: DEMO_CHAINS, activeChains: ['XRPL', 'SOLANA'], wrappedToken: { symbol: 'wVRTY', name: 'Wrapped VRTY', decimals: 6, description: 'Wrapped VRTY on Solana' }, bridgeInfo: { minAmount: MIN_BRIDGE_AMOUNT, maxAmount: MAX_BRIDGE_AMOUNT, requiredValidators: REQUIRED_VALIDATORS, estimatedTime: '5-15 minutes' } };
+      }
       try {
-        return await bridgeApi.getSupportedChains();
+        const result = await bridgeApi.getSupportedChains();
+        setUsingDemoData(false);
+        return result;
       } catch {
+        setUsingDemoData(true);
         return { chains: DEMO_CHAINS, activeChains: ['XRPL', 'SOLANA'], wrappedToken: { symbol: 'wVRTY', name: 'Wrapped VRTY', decimals: 6, description: 'Wrapped VRTY on Solana' }, bridgeInfo: { minAmount: MIN_BRIDGE_AMOUNT, maxAmount: MAX_BRIDGE_AMOUNT, requiredValidators: REQUIRED_VALIDATORS, estimatedTime: '5-15 minutes' } };
       }
     },
@@ -1363,6 +1376,18 @@ const BridgeDashboard: React.FC = () => {
                   {health?.status || 'Unknown'}
                 </span>
               </div>
+              
+              {/* Live Data Indicator */}
+              {isLiveMode && !usingDemoData && apiStatus.isOnline && (
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-400">
+                  <Radio className="w-4 h-4 animate-pulse" />
+                  <span className="text-sm font-medium">Live</span>
+                </div>
+              )}
+              
+              {/* Live/Demo Mode Toggle */}
+              <ModeToggle />
+              
               <button
                 onClick={() => {
                   queryClient.invalidateQueries({ queryKey: ['bridge-chains'] });

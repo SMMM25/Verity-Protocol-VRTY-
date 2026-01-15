@@ -14,6 +14,7 @@ import { useState, useMemo, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useUser } from '../App';
 import { assetsApi } from '../api/client';
+import { useApiContext } from '../hooks/useApiWithFallback';
 import {
   Building2,
   Briefcase,
@@ -1237,7 +1238,7 @@ type DashboardTab = 'marketplace' | 'portfolio' | 'dividends' | 'issuance' | 'wh
 
 export default function AssetsDashboard() {
   const { user } = useUser();
-  const isDemo = true;
+  const { isLiveMode, apiStatus } = useApiContext();
   
   // State
   const [activeTab, setActiveTab] = useState<DashboardTab>('marketplace');
@@ -1253,32 +1254,41 @@ export default function AssetsDashboard() {
   const [showIssuanceWizard, setShowIssuanceWizard] = useState(false);
   const [managingAsset, setManagingAsset] = useState<TokenizedAsset | null>(null);
 
-  // Queries (disabled in demo mode)
-  const { data: assetsData } = useQuery({
+  // Queries (enabled in live mode)
+  const { data: assetsData, isError: assetsError } = useQuery({
     queryKey: ['tokenizedAssets', selectedType, selectedStatus, sortBy],
     queryFn: () => assetsApi.getAssets({ 
       type: selectedType !== 'all' ? selectedType : undefined,
       status: selectedStatus !== 'all' ? selectedStatus : undefined,
     }),
-    enabled: !isDemo,
+    enabled: isLiveMode,
+    retry: 2,
   });
 
   const { data: portfolioData } = useQuery({
     queryKey: ['portfolio', user?.wallet],
     queryFn: () => assetsApi.getPortfolio(user?.wallet || ''),
-    enabled: !isDemo && !!user?.wallet,
+    enabled: isLiveMode && !!user?.wallet,
+    retry: 2,
   });
 
-  const { data: statsData } = useQuery({
+  const { data: statsData, isError: statsError } = useQuery({
     queryKey: ['platformStats'],
     queryFn: () => assetsApi.getPlatformStats(),
-    enabled: !isDemo,
+    enabled: isLiveMode,
+    retry: 2,
   });
 
-  // Use demo data
-  const assets = isDemo ? DEMO_ASSETS : (assetsData?.data || []);
-  const portfolio = isDemo ? DEMO_PORTFOLIO : (portfolioData?.data || []);
-  const stats = isDemo ? DEMO_STATS : (statsData?.data || {});
+  // Determine if using demo data
+  const isDemo = !isLiveMode || assetsError || statsError;
+  // Used for showing live indicator (can be used in UI later)
+  const _isLive = isLiveMode && !assetsError && !statsError && apiStatus.isOnline;
+  void _isLive; // Satisfy unused variable warning
+
+  // Use demo data or live data
+  const assets = isDemo ? DEMO_ASSETS : (assetsData?.data || DEMO_ASSETS);
+  const portfolio = isDemo ? DEMO_PORTFOLIO : (portfolioData?.data || DEMO_PORTFOLIO);
+  const stats = isDemo ? DEMO_STATS : (statsData?.data || DEMO_STATS);
   const dividends = isDemo ? DEMO_DIVIDENDS : [];
 
   // Filter and sort assets

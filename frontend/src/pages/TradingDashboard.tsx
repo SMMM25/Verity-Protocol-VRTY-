@@ -1,9 +1,10 @@
 /**
  * Trading Dashboard - VRTY/XRP XRPL Native DEX
  * Polished with shared UI components
+ * 
+ * API Integration: Uses live DEX API with demo fallback
  */
 import { useState, useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
 import { 
   TrendingUp, 
   TrendingDown, 
@@ -14,6 +15,7 @@ import {
   Clock,
   Wallet,
   AlertCircle,
+  Radio,
 } from 'lucide-react';
 import { dexApi } from '../api/client';
 import type { OrderBook, OrderBookEntry, MarketStats } from '../types/dex';
@@ -25,6 +27,7 @@ import {
   SkeletonStatCard,
   Skeleton,
 } from '@/components/ui';
+import { useApiWithFallback, useApiContext, ModeToggle } from '../hooks/useApiWithFallback';
 
 // ============================================================
 // MOCK DATA (for demo before live DEX listing)
@@ -500,25 +503,40 @@ function formatNumber(num: number): string {
 // ============================================================
 
 export default function TradingDashboard() {
-  const [isDemo, setIsDemo] = useState(true);
+  const { isLiveMode, apiStatus } = useApiContext();
 
-  // Try to fetch real data, fall back to mock
-  const { data: orderBookData, isLoading: orderBookLoading, refetch: refetchOrderBook } = useQuery({
-    queryKey: ['orderBook'],
-    queryFn: () => dexApi.getOrderBook(),
-    retry: false,
-    enabled: !isDemo,
-  });
+  // API integration with demo fallback
+  const { 
+    data: orderBook, 
+    isLoading: orderBookLoading, 
+    refetch: refetchOrderBook,
+    isDemo: orderBookIsDemo,
+    isLive: orderBookIsLive,
+  } = useApiWithFallback(
+    ['orderBook'],
+    async () => {
+      const response = await dexApi.getOrderBook();
+      return response.data as OrderBook;
+    },
+    MOCK_ORDER_BOOK
+  );
 
-  const { data: statsData, isLoading: statsLoading } = useQuery({
-    queryKey: ['marketStats'],
-    queryFn: () => dexApi.getMarketStats(),
-    retry: false,
-    enabled: !isDemo,
-  });
+  const { 
+    data: marketStats, 
+    isLoading: statsLoading,
+    isDemo: statsIsDemo,
+    isLive: statsIsLive,
+  } = useApiWithFallback(
+    ['marketStats'],
+    async () => {
+      const response = await dexApi.getMarketStats();
+      return response.data as MarketStats;
+    },
+    MOCK_MARKET_STATS
+  );
 
-  const orderBook = isDemo ? MOCK_ORDER_BOOK : (orderBookData?.data || MOCK_ORDER_BOOK);
-  const marketStats = isDemo ? MOCK_MARKET_STATS : (statsData?.data || MOCK_MARKET_STATS);
+  const isDemo = orderBookIsDemo || statsIsDemo;
+  const isLive = orderBookIsLive && statsIsLive;
 
   return (
     <div className="space-y-6">
@@ -529,22 +547,8 @@ export default function TradingDashboard() {
           <p className="text-slate-400">XRPL Native DEX - Zero Fees</p>
         </div>
         <div className="flex items-center gap-4">
-          {/* Demo Mode Toggle */}
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-slate-400">Demo Mode</span>
-            <button
-              onClick={() => setIsDemo(!isDemo)}
-              className={`w-12 h-6 rounded-full transition-colors ${
-                isDemo ? 'bg-violet-600' : 'bg-slate-600'
-              }`}
-            >
-              <div
-                className={`w-5 h-5 rounded-full bg-white transform transition-transform ${
-                  isDemo ? 'translate-x-6' : 'translate-x-0.5'
-                }`}
-              />
-            </button>
-          </div>
+          {/* Live/Demo Mode Toggle */}
+          <ModeToggle showLatency />
           <Button variant="secondary" onClick={() => refetchOrderBook()}>
             <RefreshCw className="w-4 h-4" />
             Refresh
@@ -552,28 +556,45 @@ export default function TradingDashboard() {
         </div>
       </div>
 
-      {/* Demo Mode Banner */}
+      {/* Mode Banner */}
       {isDemo && (
         <Card glass className="flex items-center gap-3 border-violet-500/30">
           <AlertCircle className="w-5 h-5 text-violet-400" />
           <div>
-            <p className="text-violet-300 font-medium">Demo Mode Active</p>
+            <p className="text-violet-300 font-medium">
+              {isLiveMode && !apiStatus.isOnline ? 'API Offline - Using Demo Data' : 'Demo Mode Active'}
+            </p>
             <p className="text-sm text-violet-400/80">
-              Showing simulated data. Live trading will be enabled after DEX listing.
-              Initial price: 0.02 XRP/VRTY (~$0.01)
+              {isLiveMode && !apiStatus.isOnline 
+                ? 'Unable to connect to live API. Showing simulated data until connection is restored.'
+                : 'Showing simulated data. Toggle to live mode to connect to the DEX API. Initial price: 0.02 XRP/VRTY (~$0.01)'}
+            </p>
+          </div>
+        </Card>
+      )}
+
+      {/* Live Data Indicator */}
+      {isLive && (
+        <Card glass className="flex items-center gap-3 border-emerald-500/30">
+          <Radio className="w-5 h-5 text-emerald-400 animate-pulse" />
+          <div>
+            <p className="text-emerald-300 font-medium">Live Data</p>
+            <p className="text-sm text-emerald-400/80">
+              Connected to XRPL DEX. Data refreshes automatically.
+              {apiStatus.latency && ` Latency: ${apiStatus.latency}ms`}
             </p>
           </div>
         </Card>
       )}
 
       {/* Market Stats */}
-      <MarketStatsDisplay stats={marketStats} isLoading={!isDemo && statsLoading} />
+      <MarketStatsDisplay stats={orderBook ? marketStats : MOCK_MARKET_STATS} isLoading={isLiveMode && statsLoading} />
 
       {/* Main Trading Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Order Book */}
         <div className="lg:col-span-1">
-          <OrderBookDisplay orderBook={orderBook} isLoading={!isDemo && orderBookLoading} />
+          <OrderBookDisplay orderBook={orderBook || MOCK_ORDER_BOOK} isLoading={isLiveMode && orderBookLoading} />
         </div>
 
         {/* Price Chart & Recent Trades */}

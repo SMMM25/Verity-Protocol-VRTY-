@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
 import {
   Zap,
   Star,
@@ -15,6 +14,7 @@ import {
   CheckCircle,
   Crown,
   User,
+  Radio,
 } from 'lucide-react';
 import { signalsApi } from '../api/client';
 import type { 
@@ -24,6 +24,7 @@ import type {
   SignalType,
   Creator,
 } from '../types/signals';
+import { useApiWithFallback, useApiContext, ModeToggle } from '../hooks/useApiWithFallback';
 
 // ============================================================
 // MOCK DATA (for demo)
@@ -453,27 +454,38 @@ function formatNumber(num: number): string {
 // ============================================================
 
 export default function SignalsDashboard() {
-  const [isDemo] = useState(true);
-  const [contentType] = useState<string>('all');
+  const { isLiveMode, apiStatus } = useApiContext();
   const [sortBy, setSortBy] = useState<'signals' | 'value' | 'recent'>('recent');
 
-  // Fetch data (with demo fallback)
-  const { data: leaderboardData } = useQuery({
-    queryKey: ['signalsLeaderboard'],
-    queryFn: () => signalsApi.getLeaderboard({ limit: 10 }),
-    retry: false,
-    enabled: !isDemo,
-  });
+  // API integration with demo fallback
+  const { 
+    data: leaderboard,
+    isDemo: leaderboardIsDemo,
+    isLive: leaderboardIsLive,
+  } = useApiWithFallback(
+    ['signalsLeaderboard'],
+    async () => {
+      const response = await signalsApi.getLeaderboard({ limit: 10 });
+      return response.data?.leaderboard || [];
+    },
+    MOCK_LEADERBOARD
+  );
 
-  const { data: discoverData } = useQuery({
-    queryKey: ['signalsDiscover', contentType, sortBy],
-    queryFn: () => signalsApi.discover({ sortBy, limit: 20 }),
-    retry: false,
-    enabled: !isDemo,
-  });
+  const { 
+    data: trendingContent,
+    isDemo: contentIsDemo,
+    isLive: contentIsLive,
+  } = useApiWithFallback(
+    ['signalsDiscover', sortBy],
+    async () => {
+      const response = await signalsApi.discover({ sortBy, limit: 20 });
+      return response.data?.content || [];
+    },
+    MOCK_TRENDING_CONTENT
+  );
 
-  const trendingContent = isDemo ? MOCK_TRENDING_CONTENT : (discoverData?.data?.content || MOCK_TRENDING_CONTENT);
-  const leaderboard = isDemo ? MOCK_LEADERBOARD : (leaderboardData?.data?.leaderboard || MOCK_LEADERBOARD);
+  const isDemo = leaderboardIsDemo || contentIsDemo;
+  const isLive = leaderboardIsLive && contentIsLive;
   const myReputation = MOCK_MY_REPUTATION;
   const creators = MOCK_CREATORS;
 
@@ -485,21 +497,41 @@ export default function SignalsDashboard() {
           <h1 className="text-2xl font-bold text-white">Signals Protocol</h1>
           <p className="text-gray-400">Proof-of-Engagement with Micro-XRP</p>
         </div>
-        <button className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors">
-          <Zap className="w-5 h-5" />
-          Create Content
-        </button>
+        <div className="flex items-center gap-4">
+          <ModeToggle showLatency />
+          <button className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors">
+            <Zap className="w-5 h-5" />
+            Create Content
+          </button>
+        </div>
       </div>
 
-      {/* Demo Mode Banner */}
+      {/* Mode Banner */}
       {isDemo && (
         <div className="bg-purple-600/20 border border-purple-500/30 rounded-xl p-4 flex items-center gap-3">
           <AlertCircle className="w-5 h-5 text-purple-400" />
           <div>
-            <p className="text-purple-300 font-medium">Demo Mode</p>
+            <p className="text-purple-300 font-medium">
+              {isLiveMode && !apiStatus.isOnline ? 'API Offline - Using Demo Data' : 'Demo Mode'}
+            </p>
             <p className="text-sm text-purple-400/80">
-              Connect wallet to send signals and build reputation. 
-              Minimum signal: 0.00001 XRP (10 drops).
+              {isLiveMode && !apiStatus.isOnline 
+                ? 'Unable to connect to live API. Showing simulated data until connection is restored.'
+                : 'Connect wallet to send signals and build reputation. Minimum signal: 0.00001 XRP (10 drops).'}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Live Data Indicator */}
+      {isLive && (
+        <div className="bg-emerald-600/20 border border-emerald-500/30 rounded-xl p-4 flex items-center gap-3">
+          <Radio className="w-5 h-5 text-emerald-400 animate-pulse" />
+          <div>
+            <p className="text-emerald-300 font-medium">Live Data</p>
+            <p className="text-sm text-emerald-400/80">
+              Connected to Signals API. Showing real content and reputation data.
+              {apiStatus.latency && ` Latency: ${apiStatus.latency}ms`}
             </p>
           </div>
         </div>
