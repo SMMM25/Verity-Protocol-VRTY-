@@ -1,10 +1,14 @@
 #!/bin/sh
 # Verity Protocol - Docker Entrypoint Script
 # Handles database migrations and application startup
+# Version: 1.1.0 - Added verbose logging
 
 set -e
 
-echo "=== Verity Protocol Startup ==="
+echo ""
+echo "========================================"
+echo "=== Verity Protocol Startup v1.1.0 ==="
+echo "========================================"
 echo "Environment: ${NODE_ENV:-development}"
 echo "Time: $(date -u)"
 
