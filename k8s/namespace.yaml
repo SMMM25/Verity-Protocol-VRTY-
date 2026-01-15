@@ -1,0 +1,8 @@
+# Verity Protocol - Kubernetes Namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: verity-protocol
+  labels:
+    app.kubernetes.io/name: verity-protocol
+    app.kubernetes.io/part-of: verity-protocol

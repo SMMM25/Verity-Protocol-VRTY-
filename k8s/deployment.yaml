@@ -1,0 +1,130 @@
+# Verity Protocol - API Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: verity-api
+  namespace: verity-protocol
+  labels:
+    app: verity-api
+    version: v1
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: verity-api
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: verity-api
+        version: v1
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "3000"
+        prometheus.io/path: "/api/v1/health/metrics"
+    spec:
+      serviceAccountName: verity-api
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        fsGroup: 1001
+      containers:
+        - name: verity-api
+          image: your-registry/verity-protocol:latest
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+          env:
+            - name: NODE_ENV
+              value: "production"
+            - name: PORT
+              value: "3000"
+            - name: LOG_LEVEL
+              value: "info"
+            # Secrets from Kubernetes secrets
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: verity-secrets
+                  key: DATABASE_URL
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: verity-secrets
+                  key: JWT_SECRET
+            - name: XRPL_MAINNET_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: verity-config
+                  key: XRPL_MAINNET_URL
+            - name: VERITY_ISSUER_ADDRESS
+              valueFrom:
+                configMapKeyRef:
+                  name: verity-config
+                  key: VERITY_ISSUER_ADDRESS
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "1000m"
+              memory: "1Gi"
+          livenessProbe:
+            httpGet:
+              path: /api/v1/health/live
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /api/v1/health/ready
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values:
+                        - verity-api
+                topologyKey: kubernetes.io/hostname
+---
+# Service Account
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: verity-api
+  namespace: verity-protocol
+---
+# ConfigMap for non-sensitive configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: verity-config
+  namespace: verity-protocol
+data:
+  XRPL_NETWORK: "mainnet"
+  XRPL_MAINNET_URL: "wss://xrplcluster.com/"
+  VERITY_ISSUER_ADDRESS: ""  # Set during deployment
+  CORS_ORIGINS: "https://verityprotocol.io,https://www.verityprotocol.io"

@@ -1,0 +1,35 @@
+# Verity Protocol - Kubernetes Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: verity-api
+  namespace: verity-protocol
+  labels:
+    app: verity-api
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 80
+      targetPort: 3000
+      protocol: TCP
+  selector:
+    app: verity-api
+---
+# Headless Service for StatefulSet (if needed)
+apiVersion: v1
+kind: Service
+metadata:
+  name: verity-api-headless
+  namespace: verity-protocol
+  labels:
+    app: verity-api
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+    - name: http
+      port: 3000
+      targetPort: 3000
+  selector:
+    app: verity-api
