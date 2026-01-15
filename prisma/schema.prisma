@@ -8,7 +8,11 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  // directUrl for migrations (bypasses connection pooling)
+  // directUrl = env("DIRECT_URL")
 }
+
+// Note: For Railway, use DATABASE_URL with ?sslmode=require
 
 // ============================================================
 // USER & AUTHENTICATION
