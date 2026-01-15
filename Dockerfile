@@ -51,9 +51,13 @@ RUN if [ -d "frontend" ]; then \
 # ============================================
 FROM node:20-alpine AS production
 
+# Cache buster - change this value to force rebuild
+ARG CACHE_BUST=2026011501
+
 LABEL maintainer="Verity Protocol Team"
-LABEL version="1.0.0"
+LABEL version="1.1.0"
 LABEL description="Verity Protocol - Production API Server"
+LABEL cache_bust="${CACHE_BUST}"
 
 WORKDIR /app
 
