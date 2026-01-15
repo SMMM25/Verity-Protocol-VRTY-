@@ -1,0 +1,52 @@
+# Verity Protocol - Prometheus Configuration
+# Monitor the Verity Protocol API and infrastructure
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    monitor: 'verity-protocol'
+
+# Alertmanager configuration (optional)
+# alerting:
+#   alertmanagers:
+#     - static_configs:
+#         - targets:
+#             - alertmanager:9093
+
+# Rule files
+rule_files:
+  # - "first_rules.yml"
+  # - "second_rules.yml"
+
+scrape_configs:
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Verity Protocol API
+  - job_name: 'verity-api'
+    metrics_path: '/api/v1/health/metrics'
+    static_configs:
+      - targets: ['verity-api:3000']
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'verity-api'
+
+  # PostgreSQL (via postgres_exporter)
+  # - job_name: 'postgres'
+  #   static_configs:
+  #     - targets: ['postgres-exporter:9187']
+
+  # Redis (via redis_exporter)
+  # - job_name: 'redis'
+  #   static_configs:
+  #     - targets: ['redis-exporter:9121']
+
+  # Node.js application metrics
+  - job_name: 'nodejs'
+    static_configs:
+      - targets: ['verity-api:3000']
+    metrics_path: '/api/v1/health/metrics'

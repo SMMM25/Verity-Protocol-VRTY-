@@ -43,6 +43,8 @@ temp/
 # Secrets - NEVER commit these
 *.pem
 *.key
+!scripts/secrets/  # Allow scripts directory
+scripts/secrets/*.secret  # But ignore actual secrets
 secrets/
 .secrets/
 .vrty-credentials.json
