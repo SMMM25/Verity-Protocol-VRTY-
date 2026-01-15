@@ -3,7 +3,7 @@
 > **⚠️ CRITICAL: ALL DEVELOPERS AND AI DEVELOPMENT PLATFORMS MUST READ THIS ENTIRE DOCUMENT BEFORE ANY WORK**
 
 **Last Updated**: 2026-01-15  
-**Version**: 1.2.0  
+**Version**: 1.3.0  
 **Status**: ACTIVE - ENFORCED  
 **Repository**: https://github.com/SMMM25/Verity-Protocol-VRTY-
 
@@ -31,7 +31,9 @@ This document establishes **binding rules** for all human developers, AI develop
 7. [Dashboard Status Tracker](#dashboard-status-tracker)
 8. [Work Log Requirements](#work-log-requirements)
 9. [AI Platform Specific Rules](#ai-platform-specific-rules)
-10. [Next Steps Rule](#next-steps-rule)
+10. [Deployment & Infrastructure Requirements](#deployment--infrastructure-requirements)
+11. [Deployment Verification Rule](#deployment-verification-rule)
+12. [Next Steps Rule](#next-steps-rule)
 
 ---
 
@@ -556,6 +558,235 @@ When completing work, AI platforms MUST provide the following:
 
 ---
 
+## 🚀 DEPLOYMENT & INFRASTRUCTURE REQUIREMENTS
+
+> **CRITICAL: All deployment configurations must be production-ready**
+
+### Docker & Container Requirements
+
+When working with Docker containers (Railway, Render, Fly.io, etc.), you **MUST** ensure:
+
+#### 1. Prisma Binary Targets (MANDATORY)
+
+For any project using Prisma ORM, the schema.prisma file **MUST** include binary targets for the deployment environment:
+
+```prisma
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x", "linux-musl-arm64-openssl-3.0.x"]
+}
+```
+
+**Why**: Most cloud platforms use Alpine Linux (musl libc). Without these binary targets, Prisma will fail to connect to the database at runtime with `PrismaClientInitializationError`.
+
+| Platform | Required Binary Target |
+|----------|----------------------|
+| Railway | `linux-musl-openssl-3.0.x` |
+| Render | `linux-musl-openssl-3.0.x` |
+| Fly.io | `linux-musl-openssl-3.0.x` |
+| Vercel | `rhel-openssl-1.0.x` |
+| AWS Lambda | `rhel-openssl-1.0.x` |
+
+#### 2. Database URL Configuration
+
+When configuring PostgreSQL connections:
+
+```
+✅ CORRECT (Public URL with SSL):
+DATABASE_URL=postgresql://user:pass@host.proxy.rlwy.net:5432/db?sslmode=require
+
+❌ INCORRECT (Internal URL may not resolve):
+DATABASE_URL=postgresql://user:pass@postgres.railway.internal:5432/db
+```
+
+**Best Practices**:
+- Always use the **public proxy URL** for database connections
+- Include `?sslmode=require` for secure connections
+- Test database connectivity before deploying
+
+#### 3. Docker Alpine Linux Considerations
+
+When using Alpine-based images (`node:20-alpine`), ensure:
+
+```dockerfile
+# Install OpenSSL for Prisma
+RUN apk add --no-cache openssl
+
+# Include Prisma CLI for migrations
+RUN npx prisma generate
+```
+
+#### 4. Environment Variable Checklist
+
+Before deployment, verify:
+
+- [ ] `DATABASE_URL` uses public proxy URL (not internal)
+- [ ] `DATABASE_URL` includes `?sslmode=require`
+- [ ] Prisma schema has correct `binaryTargets`
+- [ ] OpenSSL is installed in container
+- [ ] Database migrations have been run
+
+### Deployment Pre-Flight Checklist
+
+```markdown
+□ Prisma binaryTargets include "linux-musl-openssl-3.0.x"
+□ DATABASE_URL uses public proxy URL
+□ DATABASE_URL includes ?sslmode=require
+□ Database schema has been pushed (npx prisma db push)
+□ Docker image includes OpenSSL
+□ Environment variables are set in deployment platform
+□ Health check endpoint is configured
+□ Build cache cleared if making infrastructure changes
+```
+
+### Common Deployment Errors & Solutions
+
+| Error | Cause | Solution |
+|-------|-------|----------|
+| `PrismaClientInitializationError` | Missing binary target | Add `linux-musl-openssl-3.0.x` to binaryTargets |
+| `Failed to connect to database` | Wrong URL or SSL | Use public proxy URL with `?sslmode=require` |
+| `libssl not found` | Missing OpenSSL | Add `apk add --no-cache openssl` to Dockerfile |
+| `Connection timeout` | Internal URL not resolving | Switch to public proxy URL |
+
+---
+
+## 🔄 DEPLOYMENT VERIFICATION RULE
+
+> **CRITICAL: ALL infrastructure changes MUST be verified in production before marking complete**
+
+### Purpose
+
+This rule was established after encountering deployment issues where:
+- Dockerfile changes were cached and not applied
+- Database connections failed due to incorrect URL configurations
+- Prisma binary targets were missing for Alpine Linux
+- Entrypoint scripts weren't executing due to build cache
+
+**Effective Date**: 2026-01-15  
+**Status**: MANDATORY - NO EXCEPTIONS
+
+### Rule Statement
+
+When making ANY infrastructure or deployment-related changes, the developer MUST:
+
+1. **Verify the deployment actually succeeded** in the target environment
+2. **Check deploy logs** (not just build logs) for expected startup messages
+3. **Test critical functionality** (database connection, API health, etc.)
+4. **Document the verification** in the PR or work log
+
+### Infrastructure Changes Requiring Verification
+
+| Change Type | What to Verify |
+|------------|---------------|
+| Dockerfile changes | New CMD/ENTRYPOINT executes, build cache cleared |
+| Prisma schema changes | Migrations run, database connected |
+| DATABASE_URL changes | Connection established, latency reasonable |
+| Environment variables | Values are set and accessible at runtime |
+| Docker entrypoint scripts | Script executes (check for startup banner) |
+| SSL/TLS configuration | Secure connection established |
+
+### Verification Checklist
+
+When making deployment changes, complete this checklist BEFORE marking the task done:
+
+```markdown
+## Deployment Verification Checklist
+
+### Build Phase
+- [ ] Build logs show changes were applied (NOT "cached")
+- [ ] No build errors or warnings
+- [ ] Docker layers rebuilt as expected
+
+### Deploy Phase
+- [ ] Deploy logs show expected startup messages
+- [ ] No runtime errors in first 60 seconds
+- [ ] Application health check passes
+
+### Database (if applicable)
+- [ ] "Database connected successfully" in logs
+- [ ] Connection latency under 100ms
+- [ ] Migrations completed (if any)
+
+### API (if applicable)
+- [ ] Health endpoint returns 200 OK
+- [ ] API version is correct
+- [ ] All expected services initialized
+
+### Environment
+- [ ] Environment variables are accessible
+- [ ] No "undefined" or missing values in logs
+```
+
+### Required Log Messages to Verify
+
+For Verity Protocol deployments, these log messages indicate success:
+
+```
+✅ Expected messages (must appear):
+- "Verity Protocol Startup" (entrypoint running)
+- "Database connected" or "Database is available"
+- "Server running at http://0.0.0.0:XXXX"
+- "Health check: OK"
+
+❌ Problem indicators (investigate immediately):
+- "Database connection failed"
+- "running in memory-only mode"
+- "PrismaClientInitializationError"
+- "ECONNREFUSED"
+- Old startup banner version
+```
+
+### Cache Invalidation
+
+If changes aren't being applied:
+
+1. **Railway**: Settings → Build → Clear Build Cache → Redeploy
+2. **Docker**: Add `ARG CACHE_BUST=YYYYMMDDNN` to force rebuild
+3. **Prisma**: Run `npx prisma generate` in Dockerfile
+4. **General**: Make a meaningful change to force new layer
+
+### Reporting Deployment Issues
+
+When deployment verification fails:
+
+1. **Document the failure** - What logs showed, what was expected
+2. **Identify root cause** - Cache, config, binary, networking
+3. **Create fix PR** - With specific solution
+4. **Verify the fix** - Complete checklist again
+5. **Update this document** - Add new errors/solutions if discovered
+
+### Example Verification Report
+
+```markdown
+## Deployment Verification - PR #52
+
+### Build Verification
+- ✅ Build logs show Prisma binary targets updated
+- ✅ "linux-musl-openssl-3.0.x" included
+- ✅ No cached layers for production stage
+
+### Deploy Verification  
+- ✅ Startup banner shows "Verity Protocol Startup v1.1.0"
+- ✅ "Database connected (latency: 48ms)"
+- ✅ Server running on port 8080
+- ✅ Health check: 200 OK
+
+### API Test
+- ✅ curl https://verityprotocol.io/api/v1/health → {"status":"healthy"}
+
+**Result**: Deployment verified successfully
+```
+
+### Enforcement
+
+| Offense | Consequence |
+|---------|-------------|
+| Marking infrastructure task complete without verification | PR rejected, must re-verify |
+| Failing to document verification | Warning, must add documentation |
+| Repeated verification failures | Root cause analysis required |
+
+---
+
 ## 📚 REFERENCE DOCUMENTS
 
 | Document | Purpose | Location |
@@ -596,7 +827,7 @@ If you notice violations of these rules:
 
 **BY WORKING ON THIS CODEBASE, YOU AGREE TO FOLLOW ALL RULES IN THIS DOCUMENT.**
 
-*Last enforced review: 2026-01-14*
+*Last enforced review: 2026-01-15*
 
 ---
 
