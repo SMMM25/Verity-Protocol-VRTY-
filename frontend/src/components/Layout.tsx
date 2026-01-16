@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
+import { Outlet, NavLink, useNavigate, useLocation, Link } from 'react-router-dom';
 import { 
   Calculator, 
   FileText, 
@@ -166,12 +166,14 @@ export default function Layout() {
             <Menu className="w-6 h-6" />
           </button>
           
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-600 to-indigo-600 flex items-center justify-center">
-              <LayoutDashboard className="w-4 h-4 text-white" />
-            </div>
+          <Link to="/" className="flex items-center gap-2 hover:opacity-90 transition-opacity">
+            <img 
+              src="/ui/assets/branding/vrty-logo-64.png" 
+              alt="VRTY Logo" 
+              className="w-8 h-8 rounded-lg"
+            />
             <span className="font-semibold text-white">Verity</span>
-          </div>
+          </Link>
           
           <div className="w-10" /> {/* Spacer for centering */}
         </div>
@@ -202,17 +204,19 @@ export default function Layout() {
           ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
         `}
       >
-        {/* Logo */}
+        {/* Logo - Clickable to Home */}
         <div className="p-6 border-b border-slate-700 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-violet-600 to-indigo-600 flex items-center justify-center shadow-lg shadow-violet-500/25">
-              <LayoutDashboard className="w-6 h-6 text-white" />
-            </div>
+          <Link to="/" className="flex items-center gap-3 hover:opacity-90 transition-opacity">
+            <img 
+              src="/ui/assets/branding/vrty-logo-64.png" 
+              alt="VRTY Logo" 
+              className="w-10 h-10 rounded-lg shadow-lg shadow-violet-500/25"
+            />
             <div>
               <h1 className="text-lg font-bold text-white">Verity</h1>
               <p className="text-xs text-slate-400">Protocol</p>
             </div>
-          </div>
+          </Link>
           
           {/* Close button (mobile only) */}
           <button
