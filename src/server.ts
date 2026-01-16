@@ -143,9 +143,14 @@ app.use(rateLimitMiddleware);
 // API key authentication
 app.use(apiKeyAuthMiddleware);
 
-// Serve static UI files
-const uiPath = path.join(process.cwd(), 'ui');
+// Serve static UI files (frontend build)
+const uiPath = path.join(process.cwd(), 'frontend', 'dist');
 app.use('/ui', express.static(uiPath));
+
+// Serve index.html for SPA routing (React Router)
+app.get('/ui/*', (req, res) => {
+  res.sendFile(path.join(uiPath, 'index.html'));
+});
 
 // Root endpoint - redirect to UI
 app.get('/', (req, res) => {
