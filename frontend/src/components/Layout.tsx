@@ -6,7 +6,6 @@ import {
   Settings, 
   LogOut, 
   Receipt,
-  LayoutDashboard,
   Users,
   Zap,
   Wallet,
