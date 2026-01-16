@@ -114,7 +114,27 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(requestIdMiddleware);
 app.use(requestLoggerMiddleware);
 
-// Maintenance mode - must be before other routes
+// Serve public static files BEFORE maintenance mode (for XRPL metadata)
+// These must be accessible even during maintenance for token logo/metadata
+const publicPath = path.join(process.cwd(), 'public');
+app.use('/.well-known', express.static(path.join(publicPath, '.well-known'), {
+  setHeaders: (res, filePath) => {
+    // Set correct content type for TOML files
+    if (filePath.endsWith('.toml')) {
+      res.setHeader('Content-Type', 'application/toml');
+    }
+    // Enable CORS for XRPL explorers
+    res.setHeader('Access-Control-Allow-Origin', '*');
+  }
+}));
+app.use('/assets', express.static(path.join(publicPath, 'assets'), {
+  setHeaders: (res) => {
+    // Enable CORS for XRPL explorers
+    res.setHeader('Access-Control-Allow-Origin', '*');
+  }
+}));
+
+// Maintenance mode - must be before other routes (but after static assets)
 app.use(maintenanceModeMiddleware);
 
 // Rate limiting

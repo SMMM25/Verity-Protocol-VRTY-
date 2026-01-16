@@ -1,5 +1,5 @@
 # Verity Protocol (VRTY) - XRP Ledger Token Metadata
-# https://verityprotocol.io
+# https://www.verityprotocol.io
 # 
 # This file provides machine-readable metadata about the VRTY token
 # as specified by XLS-26 and the xrp-ledger.toml standard.
@@ -35,9 +35,9 @@ display_decimals = 6
 symbol = "VRTY"
 name = "Verity Protocol"
 desc = "VRTY is the native utility token of Verity Protocol - a hybrid XRPL-based platform for compliant asset tokenization, auto-tax engine, and cross-chain bridges."
-icon = "https://verityprotocol.io/assets/branding/vrty-logo.png"
-website = "https://verityprotocol.io"
-whitepaper = "https://verityprotocol.io/docs/whitepaper"
+icon = "https://www.verityprotocol.io/assets/branding/vrty-logo.png"
+website = "https://www.verityprotocol.io"
+whitepaper = "https://www.verityprotocol.io/docs/whitepaper"
 
 # Token Economics
 total_supply = 1000000000
@@ -57,7 +57,7 @@ email = "contact@verityprotocol.io"
 # =============================================================================
 
 [[SERVERS]]
-json_rpc = "https://verityprotocol.io/api/v1/"
+json_rpc = "https://www.verityprotocol.io/api/v1/"
 desc = "Verity Protocol API - Main API endpoint"
 network = "main"
 
