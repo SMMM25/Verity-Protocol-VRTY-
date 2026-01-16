@@ -1,27 +1,19 @@
 /**
  * Construction Banner Component
  * Shows a dismissible banner informing users the site is under construction
+ * Banner shows on every page load/refresh - dismissing only hides it for current session
  */
 
-import { useState, useEffect } from 'react';
-
-const BANNER_DISMISSED_KEY = 'verity_construction_banner_dismissed';
-const BANNER_VERSION = '4'; // Increment to show banner again after updates
+import { useState } from 'react';
 
 export function ConstructionBanner() {
-  const [isVisible, setIsVisible] = useState(false);
-
-  useEffect(() => {
-    // Check if user has dismissed this version of the banner
-    const dismissed = localStorage.getItem(BANNER_DISMISSED_KEY);
-    if (dismissed !== BANNER_VERSION) {
-      setIsVisible(true);
-    }
-  }, []);
+  // Banner shows by default on every page load
+  // Dismissing only hides it for the current session (until next refresh)
+  const [isVisible, setIsVisible] = useState(true);
 
   const handleDismiss = () => {
     setIsVisible(false);
-    localStorage.setItem(BANNER_DISMISSED_KEY, BANNER_VERSION);
+    // No localStorage - banner will show again on next page load/refresh
   };
 
   if (!isVisible) return null;
