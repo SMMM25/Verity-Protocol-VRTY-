@@ -77,7 +77,7 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <ApiProvider healthCheckUrl="/api/v1/health">
         <UserContext.Provider value={{ userId, setUserId, isLoggedIn, login, logout, user }}>
-          <BrowserRouter>
+          <BrowserRouter basename="/ui">
           {/* Under Construction Banner - dismissible by users */}
           <ConstructionBanner />
           <Routes>
