@@ -12,3 +12,12 @@ export type {
   WalletBalance,
   ValidatorSignature,
 } from './SolanaBridge.js';
+
+export { CrossChainVestingBridge, crossChainVestingBridge } from './VestingBridge.js';
+export type {
+  CrossChainVestingConfig,
+  CrossChainVestingSchedule,
+  CrossChainVestingRelease,
+  CreateVestingResult,
+} from './VestingBridge.js';
+export { CrossChainVestingStatus, ReleaseStatus } from './VestingBridge.js';
