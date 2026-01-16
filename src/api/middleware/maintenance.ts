@@ -8,10 +8,12 @@ import path from 'path';
 import fs from 'fs';
 
 // Check if maintenance mode is enabled
-// TEMPORARY: Hardcoded to true until launch. Change to false or use env var to disable.
+// Set MAINTENANCE_MODE=true in environment to enable full maintenance mode
+// Otherwise, the Construction Banner in the frontend will inform users
 export const isMaintenanceMode = (): boolean => {
-  // Hardcoded ON for pre-launch. To disable, change to: return process.env['MAINTENANCE_MODE'] === 'true';
-  return true;
+  // Maintenance mode is now controlled by environment variable
+  // The frontend shows a dismissible "Under Construction" banner instead
+  return process.env['MAINTENANCE_MODE'] === 'true';
 };
 
 // Paths that should always be accessible (even in maintenance mode)
@@ -62,7 +64,7 @@ export const maintenanceModeMiddleware = (req: Request, res: Response, next: Nex
         code: 'SERVICE_UNAVAILABLE',
         message: 'Verity Protocol is currently under maintenance. Please check back soon.',
         status: 'maintenance',
-        estimatedLaunch: 'Q1 2026',
+        estimatedLaunch: 'Q2 2026',
       },
       meta: {
         timestamp: new Date().toISOString(),
