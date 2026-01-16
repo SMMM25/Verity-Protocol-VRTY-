@@ -6,7 +6,7 @@
 import { useState, useEffect } from 'react';
 
 const BANNER_DISMISSED_KEY = 'verity_construction_banner_dismissed';
-const BANNER_VERSION = '3'; // Increment to show banner again after updates
+const BANNER_VERSION = '4'; // Increment to show banner again after updates
 
 export function ConstructionBanner() {
   const [isVisible, setIsVisible] = useState(false);
