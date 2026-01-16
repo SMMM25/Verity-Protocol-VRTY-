@@ -228,12 +228,12 @@ export default function Landing() {
               <a href="#how-it-works" className="text-white/60 hover:text-white transition-colors text-sm font-medium">
                 How it Works
               </a>
-              <a 
-                href="/whitepaper" 
+              <Link 
+                to="/whitepaper" 
                 className="text-white/60 hover:text-white transition-colors text-sm font-medium"
               >
                 Whitepaper
-              </a>
+              </Link>
             </nav>
             <button 
               onClick={handleLaunchApp}
@@ -326,13 +326,13 @@ export default function Landing() {
               </span>
               <div className="absolute inset-0 bg-gradient-to-r from-violet-500 to-indigo-500 opacity-0 group-hover:opacity-100 transition-opacity" />
             </button>
-            <a 
-              href="/whitepaper"
+            <Link 
+              to="/whitepaper"
               className="group border border-white/20 bg-white/5 text-white hover:bg-white/10 px-8 py-4 text-lg font-semibold rounded-xl backdrop-blur-sm transition-all duration-300 hover:scale-105 flex items-center gap-2"
             >
               <BookOpen className="w-5 h-5 opacity-80" />
               View Whitepaper
-            </a>
+            </Link>
           </div>
 
           {/* Trust Badges */}
@@ -562,13 +562,13 @@ export default function Landing() {
                 >
                   <Twitter className="w-4 h-4" />
                 </a>
-                <a 
-                  href="/whitepaper" 
+                <Link 
+                  to="/whitepaper" 
                   className="w-9 h-9 rounded-lg bg-white/5 flex items-center justify-center text-white/60 hover:text-white hover:bg-white/10 transition-all duration-300 hover:scale-110"
                   aria-label="Whitepaper"
                 >
                   <BookOpen className="w-4 h-4" />
-                </a>
+                </Link>
                 <a 
                   href="https://discord.gg/verity" 
                   target="_blank"
