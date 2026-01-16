@@ -52,7 +52,7 @@ RUN if [ -d "frontend" ]; then \
 FROM node:20-alpine AS production
 
 # Cache buster - change this value to force rebuild
-ARG CACHE_BUST=2026011501
+ARG CACHE_BUST=2026011602
 
 LABEL maintainer="Verity Protocol Team"
 LABEL version="1.1.0"
@@ -90,6 +90,9 @@ COPY --from=builder /app/dist ./dist
 
 # Copy frontend build (directory is guaranteed to exist from builder stage)
 COPY --from=builder /app/frontend/dist ./frontend/dist
+
+# Copy public static files (logo, xrp-ledger.toml for XRPL metadata)
+COPY --from=builder /app/public ./public
 
 # Copy necessary configuration files
 COPY tsconfig.json ./
