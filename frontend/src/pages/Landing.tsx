@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { 
   FileText, 
   TrendingUp, 
@@ -215,12 +215,14 @@ export default function Landing() {
             : 'bg-transparent border-transparent'
         }`}>
           <div className="container mx-auto px-6 py-3 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-600 to-indigo-600 flex items-center justify-center shadow-lg shadow-violet-500/25">
-                <Zap className="w-5 h-5 text-white" />
-              </div>
+            <Link to="/" className="flex items-center gap-3 hover:opacity-90 transition-opacity">
+              <img 
+                src="/ui/assets/branding/vrty-logo-64.png" 
+                alt="VRTY Logo" 
+                className="w-10 h-10 rounded-xl shadow-lg shadow-violet-500/25"
+              />
               <span className="text-xl font-bold text-white">Verity</span>
-            </div>
+            </Link>
             <nav className="hidden md:flex items-center gap-8">
               <a href="#features" className="text-white/60 hover:text-white transition-colors text-sm font-medium">
                 Features
@@ -543,12 +545,14 @@ export default function Landing() {
           <div className="grid grid-cols-2 md:grid-cols-5 gap-8 mb-12">
             {/* Brand Column */}
             <div className="col-span-2 md:col-span-1">
-              <div className="flex items-center gap-2 mb-4">
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-600 to-indigo-600 flex items-center justify-center shadow-lg shadow-violet-500/25">
-                  <Shield className="w-5 h-5 text-white" />
-                </div>
+              <Link to="/" className="flex items-center gap-2 mb-4 hover:opacity-90 transition-opacity">
+                <img 
+                  src="/ui/assets/branding/vrty-logo-64.png" 
+                  alt="VRTY Logo" 
+                  className="w-10 h-10 rounded-xl shadow-lg shadow-violet-500/25"
+                />
                 <span className="text-xl font-bold text-white">Verity</span>
-              </div>
+              </Link>
               <p className="text-white/50 text-sm mb-4 leading-relaxed">
                 Institutional-grade asset tokenization on XRPL.
               </p>
