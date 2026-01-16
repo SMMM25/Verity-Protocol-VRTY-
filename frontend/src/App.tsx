@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useState, createContext, useContext } from 'react';
 import Layout from './components/Layout';
+import ConstructionBanner from './components/ConstructionBanner';
 import TaxDashboard from './pages/TaxDashboard';
 import TaxTransactions from './pages/TaxTransactions';
 import TaxReports from './pages/TaxReports';
@@ -77,6 +78,8 @@ function App() {
       <ApiProvider healthCheckUrl="/api/v1/health">
         <UserContext.Provider value={{ userId, setUserId, isLoggedIn, login, logout, user }}>
           <BrowserRouter>
+          {/* Under Construction Banner - dismissible by users */}
+          <ConstructionBanner />
           <Routes>
             <Route path="/" element={<Landing />} />
             <Route path="/app" element={isLoggedIn ? <Layout /> : <Navigate to="/" />}>
