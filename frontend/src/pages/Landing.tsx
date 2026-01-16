@@ -15,7 +15,6 @@ import {
   MessageCircle,
   ExternalLink,
   ArrowRight,
-  Zap,
   Globe,
   Lock,
   BarChart3
