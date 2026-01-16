@@ -16,6 +16,7 @@ import AssetsDashboard from './pages/AssetsDashboard';
 import SentinelDashboard from './pages/SentinelDashboard';
 import BridgeDashboard from './pages/BridgeDashboard';
 import Landing from './pages/Landing';
+import Whitepaper from './pages/Whitepaper';
 import SimpleDashboard from './pages/SimpleDashboard';
 import { ApiProvider } from './hooks/useApiWithFallback';
 
@@ -82,6 +83,7 @@ function App() {
           <ConstructionBanner />
           <Routes>
             <Route path="/" element={<Landing />} />
+            <Route path="/whitepaper" element={<Whitepaper />} />
             <Route path="/app" element={isLoggedIn ? <Layout /> : <Navigate to="/" />}>
               <Route index element={<Navigate to="dashboard" replace />} />
               {/* Simple Mode Dashboard - Main Entry Point */}
