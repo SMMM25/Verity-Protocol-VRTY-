@@ -1,0 +1,64 @@
+# Verity Protocol (VRTY) - XRP Ledger Token Metadata
+# https://verityprotocol.io
+# 
+# This file provides machine-readable metadata about the VRTY token
+# as specified by XLS-26 and the xrp-ledger.toml standard.
+#
+# Last Updated: 2026-01-16
+
+[METADATA]
+modified = 2026-01-16T00:00:00.000Z
+
+# =============================================================================
+# ACCOUNTS
+# =============================================================================
+
+[[ACCOUNTS]]
+address = "rBeHfq9vRjZ8Cth1sMbp2nJvExmxSxAH8f"
+network = "main"
+desc = "VRTY Token Issuer - Official issuing address for VRTY tokens"
+
+[[ACCOUNTS]]
+address = "rLmLMErLKDzWXyYmcZGHqQ3SCgTVJCVjA3"
+network = "main"
+desc = "VRTY Treasury - Protocol treasury and distribution wallet"
+
+# =============================================================================
+# CURRENCIES / TOKENS
+# =============================================================================
+
+[[CURRENCIES]]
+code = "VRTY"
+issuer = "rBeHfq9vRjZ8Cth1sMbp2nJvExmxSxAH8f"
+network = "main"
+display_decimals = 6
+symbol = "VRTY"
+name = "Verity Protocol"
+desc = "VRTY is the native utility token of Verity Protocol - a hybrid XRPL-based platform for compliant asset tokenization, auto-tax engine, and cross-chain bridges."
+icon = "https://verityprotocol.io/assets/branding/vrty-logo.png"
+website = "https://verityprotocol.io"
+whitepaper = "https://verityprotocol.io/docs/whitepaper"
+
+# Token Economics
+total_supply = 1000000000
+circulating_supply = 0
+max_supply = 1000000000
+
+# =============================================================================
+# PRINCIPALS (Contact Information)
+# =============================================================================
+
+[[PRINCIPALS]]
+name = "Verity Protocol Team"
+email = "contact@verityprotocol.io"
+
+# =============================================================================
+# SERVERS (Public API Endpoints)
+# =============================================================================
+
+[[SERVERS]]
+json_rpc = "https://verityprotocol.io/api/v1/"
+desc = "Verity Protocol API - Main API endpoint"
+network = "main"
+
+# End of xrp-ledger.toml
