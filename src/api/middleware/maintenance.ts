@@ -64,7 +64,7 @@ export const maintenanceModeMiddleware = (req: Request, res: Response, next: Nex
         code: 'SERVICE_UNAVAILABLE',
         message: 'Verity Protocol is currently under maintenance. Please check back soon.',
         status: 'maintenance',
-        estimatedLaunch: 'Q1 2026',
+        estimatedLaunch: 'Q2 2026',
       },
       meta: {
         timestamp: new Date().toISOString(),

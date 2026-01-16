@@ -49,7 +49,7 @@ export function ConstructionBanner() {
       <span style={{ fontSize: '14px', fontWeight: 500 }}>
         <strong>Verity Protocol is under construction</strong>
         <span style={{ opacity: 0.9, marginLeft: '8px' }}>
-          — Launching Q1 2026. Some features may be incomplete.
+          — Launching Q2 2026. Some features may be incomplete.
         </span>
       </span>
       <button
