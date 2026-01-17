@@ -14,6 +14,7 @@ import { tokenRoutes } from './token.js';
 import { taxRoutes } from './tax.js';
 import { governanceRoutes } from './governance.js';
 import { transparencyRoutes } from './transparency.js';
+import { transparencyMonitorRoutes } from '../../transparency/index.js';
 import { complianceRoutes } from './compliance.js';
 import { vrtyRoutes } from './vrty.js';
 import { bridgeRoutes } from './bridge.js';
@@ -33,6 +34,7 @@ router.use('/token', tokenRoutes);
 router.use('/tax', taxRoutes);
 router.use('/governance', governanceRoutes);
 router.use('/transparency', transparencyRoutes);
+router.use('/transparency', transparencyMonitorRoutes); // Solvency monitor endpoints
 router.use('/compliance', complianceRoutes);
 router.use('/vrty', vrtyRoutes);
 router.use('/bridge', bridgeRoutes);
@@ -63,8 +65,16 @@ router.get('/docs', (req, res) => {
       sentinel: '/api/v1/sentinel',
       openapi: '/api/v1/openapi.json',
       swagger: '/api/v1/swagger',
+      transparencyMonitor: '/api/v1/transparency/entities',
     },
     transparency: '/api/v1/transparency',
+    solvencyMonitor: {
+      entities: '/api/v1/transparency/entities',
+      report: '/api/v1/transparency/report/:entityId',
+      badge: '/api/v1/transparency/badge/:entityId.svg',
+      verify: '/api/v1/transparency/verify/:entityId',
+      alerts: '/api/v1/transparency/alerts/:entityId',
+    },
     documentation: 'https://docs.verity.finance/api',
   });
 });

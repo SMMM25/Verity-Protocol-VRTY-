@@ -18,6 +18,7 @@ import BridgeDashboard from './pages/BridgeDashboard';
 import Landing from './pages/Landing';
 import Whitepaper from './pages/Whitepaper';
 import SimpleDashboard from './pages/SimpleDashboard';
+import TransparencyPage from './pages/TransparencyPage';
 import { ApiProvider } from './hooks/useApiWithFallback';
 
 const queryClient = new QueryClient({
@@ -84,6 +85,9 @@ function App() {
           <Routes>
             <Route path="/" element={<Landing />} />
             <Route path="/whitepaper" element={<Whitepaper />} />
+            {/* Transparency Monitor - Public (no auth required) */}
+            <Route path="/transparency" element={<TransparencyPage />} />
+            <Route path="/transparency/:entityId" element={<TransparencyPage />} />
             <Route path="/app" element={isLoggedIn ? <Layout /> : <Navigate to="/" />}>
               <Route index element={<Navigate to="dashboard" replace />} />
               {/* Simple Mode Dashboard - Main Entry Point */}
