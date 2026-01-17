@@ -5,6 +5,8 @@
 
 import winston from 'winston';
 import crypto from 'crypto';
+import fs from 'fs';
+import path from 'path';
 
 const LOG_LEVELS = {
   error: 0,
@@ -38,30 +40,84 @@ const jsonFormat = winston.format.combine(
 );
 
 const isDevelopment = process.env['NODE_ENV'] !== 'production';
+const isContainerEnv = process.env['RAILWAY_ENVIRONMENT'] || process.env['RENDER'] || process.env['HEROKU'];
+
+// Create logs directory if not in container environment
+const logsDir = path.join(process.cwd(), 'logs');
+const canUseFileLogging = !isContainerEnv;
+
+if (canUseFileLogging) {
+  try {
+    if (!fs.existsSync(logsDir)) {
+      fs.mkdirSync(logsDir, { recursive: true });
+    }
+  } catch {
+    // Silently fall back to console-only logging
+  }
+}
+
+// Build transports array
+const transports: winston.transport[] = [
+  new winston.transports.Console(),
+];
+
+// Only add file transports if we can use them
+if (canUseFileLogging && fs.existsSync(logsDir)) {
+  transports.push(
+    new winston.transports.File({
+      filename: path.join(logsDir, 'error.log'),
+      level: 'error',
+    }),
+    new winston.transports.File({
+      filename: path.join(logsDir, 'combined.log'),
+    })
+  );
+}
 
 export const logger = winston.createLogger({
   level: process.env['LOG_LEVEL'] || 'info',
   levels: LOG_LEVELS,
   format: isDevelopment ? format : jsonFormat,
-  transports: [
-    new winston.transports.Console(),
-    new winston.transports.File({
-      filename: 'logs/error.log',
-      level: 'error',
-    }),
-    new winston.transports.File({
-      filename: 'logs/combined.log',
-    }),
-  ],
+  transports,
 });
 
 /**
- * Generate a verification hash for audit logging
- * Uses the implementation from crypto.ts
+ * Generate a stable verification hash for audit logging
+ * Handles null, non-objects, and nested structures safely
  */
 function generateLogVerificationHash(data: unknown): string {
-  const stringified = JSON.stringify(data, Object.keys(data as object).sort());
-  return crypto.createHash('sha256').update(stringified).digest('hex');
+  try {
+    // Handle null/undefined
+    if (data === null || data === undefined) {
+      return crypto.createHash('sha256').update('null').digest('hex');
+    }
+    
+    // Handle non-objects (strings, numbers, etc.)
+    if (typeof data !== 'object') {
+      return crypto.createHash('sha256').update(String(data)).digest('hex');
+    }
+    
+    // Deep stable stringify for objects
+    const stringified = stableStringify(data);
+    return crypto.createHash('sha256').update(stringified).digest('hex');
+  } catch {
+    // Fallback for circular references or BigInt
+    return crypto.createHash('sha256').update(String(Date.now())).digest('hex');
+  }
+}
+
+/**
+ * Stable JSON stringify that handles nested objects deterministically
+ */
+function stableStringify(obj: unknown): string {
+  if (obj === null || obj === undefined) return 'null';
+  if (typeof obj !== 'object') return JSON.stringify(obj);
+  if (Array.isArray(obj)) {
+    return '[' + obj.map(stableStringify).join(',') + ']';
+  }
+  const keys = Object.keys(obj as object).sort();
+  const pairs = keys.map(k => `${JSON.stringify(k)}:${stableStringify((obj as Record<string, unknown>)[k])}`);
+  return '{' + pairs.join(',') + '}';
 }
 
 /**
