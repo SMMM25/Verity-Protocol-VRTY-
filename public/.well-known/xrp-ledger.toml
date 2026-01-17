@@ -4,13 +4,52 @@
 # This file provides machine-readable metadata about the VRTY token
 # as specified by XLS-26 and the xrp-ledger.toml standard.
 #
-# Last Updated: 2026-01-16
+# Last Updated: 2026-01-17
 
 [METADATA]
-modified = 2026-01-16T00:00:00.000Z
+modified = 2026-01-17T00:00:00.000Z
 
 # =============================================================================
-# ACCOUNTS
+# ISSUERS - Required by XRPL Meta
+# =============================================================================
+
+[[ISSUERS]]
+address = "rBeHfq9vRjZ8Cth1sMbp2nJvExmxSxAH8f"
+name = "Verity Protocol"
+
+[[ISSUERS]]
+address = "rLmLMErLKDzWXyYmcZGHqQ3SCgTVJCVjA3"
+name = "Verity Protocol Treasury"
+
+# =============================================================================
+# TOKENS - Required by XRPL Meta for icon/metadata display in XUMM/Xaman
+# =============================================================================
+
+[[TOKENS]]
+issuer = "rBeHfq9vRjZ8Cth1sMbp2nJvExmxSxAH8f"
+currency = "VRTY"
+name = "Verity Protocol"
+desc = "VRTY is the native utility token of Verity Protocol - a hybrid XRPL-based platform for compliant asset tokenization, auto-tax engine, and cross-chain bridges."
+icon = "https://www.verityprotocol.io/assets/branding/vrty-logo-128.png"
+
+[[TOKENS.URLS]]
+url = "https://www.verityprotocol.io"
+type = "website"
+
+[[TOKENS.URLS]]
+url = "https://twitter.com/VerityProtocol"
+type = "social"
+
+[[TOKENS.URLS]]
+url = "https://discord.gg/verity"
+type = "social"
+
+[[TOKENS.URLS]]
+url = "https://www.verityprotocol.io/ui/whitepaper"
+type = "info"
+
+# =============================================================================
+# ACCOUNTS - Additional account information (optional)
 # =============================================================================
 
 [[ACCOUNTS]]
@@ -24,7 +63,7 @@ network = "main"
 desc = "VRTY Treasury - Protocol treasury and distribution wallet"
 
 # =============================================================================
-# CURRENCIES / TOKENS
+# CURRENCIES - Legacy format (keeping for compatibility)
 # =============================================================================
 
 [[CURRENCIES]]
@@ -35,9 +74,9 @@ display_decimals = 6
 symbol = "VRTY"
 name = "Verity Protocol"
 desc = "VRTY is the native utility token of Verity Protocol - a hybrid XRPL-based platform for compliant asset tokenization, auto-tax engine, and cross-chain bridges."
-icon = "https://www.verityprotocol.io/assets/branding/vrty-logo.png"
+icon = "https://www.verityprotocol.io/assets/branding/vrty-logo-128.png"
 website = "https://www.verityprotocol.io"
-whitepaper = "https://www.verityprotocol.io/docs/whitepaper"
+whitepaper = "https://www.verityprotocol.io/ui/whitepaper"
 
 # Token Economics
 total_supply = 1000000000
