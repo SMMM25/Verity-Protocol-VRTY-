@@ -14,7 +14,7 @@
  * - GET /health/metrics - Prometheus-compatible metrics
  */
 
-import { Router, Request, Response } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import { checkDatabaseHealth } from '../../db/index.js';
 import os from 'os';
 
@@ -29,7 +29,10 @@ const metrics = {
   startTime: Date.now(),
 };
 
-// Middleware to track metrics (applied at app level, but we track here)
+/**
+ * Track request metrics for health/metrics endpoint
+ * Call this on every response to gather accurate metrics
+ */
 export const trackMetrics = (success: boolean, latency: number) => {
   metrics.requestsTotal++;
   if (success) {
@@ -42,6 +45,22 @@ export const trackMetrics = (success: boolean, latency: number) => {
   if (metrics.requestLatencies.length > 1000) {
     metrics.requestLatencies.shift();
   }
+};
+
+/**
+ * Express middleware to automatically track metrics on every request
+ * Add this to your app to populate the /health/metrics endpoint
+ */
+export const metricsMiddleware = (req: Request, res: Response, next: NextFunction) => {
+  const startTime = Date.now();
+  
+  res.on('finish', () => {
+    const latency = Date.now() - startTime;
+    const success = res.statusCode < 400;
+    trackMetrics(success, latency);
+  });
+  
+  next();
 };
 
 // Calculate percentile
