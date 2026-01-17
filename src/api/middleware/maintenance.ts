@@ -75,9 +75,16 @@ export const maintenanceModeMiddleware = (req: Request, res: Response, next: Nex
   }
 
   // For all other routes (UI), serve the coming-soon page
-  const comingSoonPath = path.join(process.cwd(), 'ui', 'coming-soon.html');
+  // Try multiple possible locations for the coming-soon page
+  const possiblePaths = [
+    path.join(process.cwd(), 'frontend', 'dist', 'coming-soon.html'),  // Production build location
+    path.join(process.cwd(), 'public', 'coming-soon.html'),            // Public static assets
+    path.join(process.cwd(), 'ui', 'coming-soon.html'),                // Legacy location
+  ];
   
-  if (fs.existsSync(comingSoonPath)) {
+  const comingSoonPath = possiblePaths.find(p => fs.existsSync(p));
+  
+  if (comingSoonPath) {
     res.sendFile(comingSoonPath);
   } else {
     // Fallback HTML if file doesn't exist
@@ -104,7 +111,7 @@ export const maintenanceModeMiddleware = (req: Request, res: Response, next: Nex
       <body>
         <div>
           <h1>Verity Protocol</h1>
-          <p>Under Construction - Launching Q1 2026</p>
+          <p>Under Construction - Launching Q2 2026</p>
         </div>
       </body>
       </html>
