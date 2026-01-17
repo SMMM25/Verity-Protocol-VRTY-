@@ -137,11 +137,14 @@ app.use('/assets', express.static(path.join(publicPath, 'assets'), {
 // Maintenance mode - must be before other routes (but after static assets)
 app.use(maintenanceModeMiddleware);
 
-// Rate limiting
-app.use(rateLimitMiddleware);
-
-// API key authentication
+// API key authentication - MUST come before rate limiting
+// so that tier-based rate limits work correctly
 app.use(apiKeyAuthMiddleware);
+
+// Rate limiting - uses tier from auth middleware
+// If auth runs first, we get proper tier-based limits
+// Otherwise everyone gets default EXPLORER tier
+app.use(rateLimitMiddleware);
 
 // Serve static UI files (frontend build)
 const uiPath = path.join(process.cwd(), 'frontend', 'dist');
