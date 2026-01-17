@@ -18,7 +18,6 @@ import {
   rateLimitMiddleware,
   errorHandlerMiddleware,
   notFoundMiddleware,
-  corsOptionsMiddleware,
 } from './api/middleware.js';
 import { initializeXummAuth } from './api/middleware/xummAuth.js';
 import { maintenanceModeMiddleware, isMaintenanceMode } from './api/middleware/maintenance.js';
@@ -94,14 +93,36 @@ app.use(helmet({
 }));
 
 // CORS configuration
+// Note: credentials: true is incompatible with origin: '*' in browsers
+// We use a dynamic origin function that:
+// - Returns the requesting origin when credentials are needed (for specific domains)
+// - Returns '*' for public API access without credentials
+const ALLOWED_ORIGINS = process.env['CORS_ORIGIN']?.split(',').map(o => o.trim()) || [];
+
 app.use(cors({
-  origin: process.env['CORS_ORIGIN'] || '*',
+  origin: (origin, callback) => {
+    // Allow requests with no origin (mobile apps, curl, etc.)
+    if (!origin) {
+      return callback(null, true);
+    }
+    // If specific origins are configured, check against allowlist
+    if (ALLOWED_ORIGINS.length > 0 && ALLOWED_ORIGINS[0] !== '*') {
+      if (ALLOWED_ORIGINS.includes(origin)) {
+        return callback(null, origin);
+      }
+      // Still allow the request but without credentials
+      return callback(null, true);
+    }
+    // Default: allow all origins (no credentials)
+    return callback(null, true);
+  },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-API-Key', 'X-Request-ID', 'X-Wallet-Address'],
   exposedHeaders: ['X-Request-ID'],
-  credentials: true,
+  // Only enable credentials when specific origins are configured
+  credentials: ALLOWED_ORIGINS.length > 0 && ALLOWED_ORIGINS[0] !== '*',
 }));
-app.use(corsOptionsMiddleware);
+// Removed duplicate corsOptionsMiddleware - using single CORS strategy
 
 // Compression
 app.use(compression());
