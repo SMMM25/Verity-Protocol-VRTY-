@@ -90,7 +90,15 @@ export async function apiKeyAuthMiddleware(
   res: Response,
   next: NextFunction
 ): Promise<void> {
-  const apiKey = req.get('X-API-Key') || req.query['api_key'] as string;
+  // SECURITY: Only accept API key from header, not query string
+  // Query string API keys leak via:
+  // - Server logs
+  // - Browser history
+  // - Referer headers
+  // - CDN/proxy caches
+  // Development mode can still use query string for testing convenience
+  const apiKey = req.get('X-API-Key') || 
+    (process.env['NODE_ENV'] === 'development' ? req.query['api_key'] as string : undefined);
 
   if (!apiKey) {
     // Allow unauthenticated access to public endpoints
