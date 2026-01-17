@@ -34,5 +34,7 @@ export * from './utils/index.js';
 // SDK
 export { VeritySDK, default } from './sdk/index.js';
 
-// Version
-export const VERSION = '0.2.0';
+// Version - synced with package.json
+// To update: change version in package.json and here
+// TODO: Add build-time version injection
+export const VERSION = '0.1.0';
