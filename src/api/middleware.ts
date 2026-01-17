@@ -97,8 +97,22 @@ export async function apiKeyAuthMiddleware(
   // - Referer headers
   // - CDN/proxy caches
   // Development mode can still use query string for testing convenience
-  const apiKey = req.get('X-API-Key') || 
-    (process.env['NODE_ENV'] === 'development' ? req.query['api_key'] as string : undefined);
+  const queryKey = req.query['api_key'] as string | undefined;
+  const headerKey = req.get('X-API-Key');
+  
+  // Reject query string API keys in production with clear error
+  if (queryKey && process.env['NODE_ENV'] !== 'development') {
+    res.status(400).json({
+      success: false,
+      error: {
+        code: 'INSECURE_API_KEY',
+        message: 'Query string API keys are not supported in production. Use the X-API-Key header instead.',
+      },
+    });
+    return;
+  }
+  
+  const apiKey = headerKey || (process.env['NODE_ENV'] === 'development' ? queryKey : undefined);
 
   if (!apiKey) {
     // Allow unauthenticated access to public endpoints
