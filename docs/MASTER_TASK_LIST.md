@@ -1,6 +1,6 @@
 # Verity Protocol - Master Task List
 
-> **Last Updated**: 2026-01-14
+> **Last Updated**: 2026-01-17
 > **Overall Progress**: ~45%
 > **Next Milestone**: Build Utility (then DEX listing)
 > **Strategy**: Build utility first, then distribute tokens
@@ -107,6 +107,9 @@
 | **C-19** | **Security Audit** | **2026-01-14** | **BUG_BOUNTY_AUDIT.md** |
 | **C-20** | **Launch Scripts** | **2026-01-14** | **LAUNCH_READY.ts ready** |
 | **C-21** | **Documentation System** | **2026-01-14** | **CLAUDE.md, PROJECT_STATE.md** |
+| **C-22** | **UI Fixes: Tailwind v4, Logo, Banner** | **2026-01-16** | **PRs #62-#72** |
+| **C-23** | **Backend Audit Fixes** | **2026-01-17** | **PRs #73-#81 (9 security/ops fixes)** |
+| **C-24** | **XRPL Meta TOML (XUMM logo)** | **2026-01-17** | **PR #72 - [[TOKENS]] format** |
 
 ---
 
@@ -194,5 +197,5 @@ TREASURY_WALLET_SECRET=xxx npx ts-node scripts/operations/cancel-offers.ts
 
 ---
 
-*Last Updated: 2026-01-14*
+*Last Updated: 2026-01-17*
 *Updated automatically on major commits*
