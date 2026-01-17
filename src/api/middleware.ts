@@ -249,29 +249,12 @@ export function notFoundMiddleware(req: Request, res: Response): void {
   });
 }
 
-/**
- * CORS configuration middleware
- */
-export function corsOptionsMiddleware(
-  req: Request,
-  res: Response,
-  next: NextFunction
-): void {
-  res.header('Access-Control-Allow-Origin', '*');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.header(
-    'Access-Control-Allow-Headers',
-    'Origin, X-Requested-With, Content-Type, Accept, X-API-Key, Authorization'
-  );
-  res.header('Access-Control-Expose-Headers', 'X-Request-ID');
-
-  if (req.method === 'OPTIONS') {
-    res.sendStatus(200);
-    return;
-  }
-
-  next();
-}
+// NOTE: corsOptionsMiddleware was removed in PR #80
+// CORS is now handled by the cors() package in server.ts with:
+// - Dynamic origin allowlist via CORS_ORIGIN env var
+// - Proper credentials handling (only when allowlist configured)
+// - Rejection of disallowed origins in strict mode
+// Do NOT re-add a manual CORS middleware - use cors() config instead
 
 // Helper functions
 function isPublicEndpoint(path: string): boolean {
