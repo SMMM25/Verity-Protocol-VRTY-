@@ -102,7 +102,8 @@ function generateLogVerificationHash(data: unknown): string {
     return crypto.createHash('sha256').update(stringified).digest('hex');
   } catch {
     // Fallback for circular references or BigInt
-    return crypto.createHash('sha256').update(String(Date.now())).digest('hex');
+    // Use deterministic string for audit integrity (not Date.now())
+    return crypto.createHash('sha256').update(`[unstringifiable:${typeof data}]`).digest('hex');
   }
 }
 

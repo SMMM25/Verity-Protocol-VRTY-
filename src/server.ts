@@ -103,11 +103,15 @@ app.use(cors({
   origin: (origin, callback) => {
     // Allow requests with no origin (mobile apps, curl, etc.)
     if (!origin) return callback(null, true);
-    // If specific origins configured, check allowlist
+    // If specific origins configured, enforce allowlist
     if (ALLOWED_ORIGINS.length > 0 && ALLOWED_ORIGINS[0] !== '*') {
-      if (ALLOWED_ORIGINS.includes(origin)) return callback(null, origin);
+      if (ALLOWED_ORIGINS.includes(origin)) {
+        return callback(null, origin);
+      }
+      // Reject disallowed origins in strict mode
+      return callback(new Error(`Origin ${origin} not allowed by CORS`), false);
     }
-    // Default: allow all origins
+    // Default (no CORS_ORIGIN set): allow all origins (public API mode)
     return callback(null, true);
   },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
@@ -154,11 +158,11 @@ app.use('/assets', express.static(path.join(publicPath, 'assets'), {
 // Maintenance mode - must be before other routes (but after static assets)
 app.use(maintenanceModeMiddleware);
 
-// Rate limiting
-app.use(rateLimitMiddleware);
-
-// API key authentication
+// API key authentication - MUST be before rate limiting for tier-based limits
 app.use(apiKeyAuthMiddleware);
+
+// Rate limiting - uses userTier from auth middleware for tier-based limits
+app.use(rateLimitMiddleware);
 
 // Serve static UI files (frontend build)
 const uiPath = path.join(process.cwd(), 'frontend', 'dist');
