@@ -21,6 +21,7 @@ import {
 } from './api/middleware.js';
 import { initializeXummAuth } from './api/middleware/xummAuth.js';
 import { maintenanceModeMiddleware, isMaintenanceMode } from './api/middleware/maintenance.js';
+import { metricsMiddleware } from './api/routes/health.js';
 import { connectDatabase, disconnectDatabase, checkDatabaseHealth } from './db/index.js';
 import { logger } from './utils/logger.js';
 
@@ -94,26 +95,19 @@ app.use(helmet({
 
 // CORS configuration
 // Note: credentials: true is incompatible with origin: '*' in browsers
-// We use a dynamic origin function that:
-// - Returns the requesting origin when credentials are needed (for specific domains)
-// - Returns '*' for public API access without credentials
+// We use a dynamic origin function that allows all origins without credentials
+// For production, set CORS_ORIGIN to specific allowed origins
 const ALLOWED_ORIGINS = process.env['CORS_ORIGIN']?.split(',').map(o => o.trim()) || [];
 
 app.use(cors({
   origin: (origin, callback) => {
     // Allow requests with no origin (mobile apps, curl, etc.)
-    if (!origin) {
-      return callback(null, true);
-    }
-    // If specific origins are configured, check against allowlist
+    if (!origin) return callback(null, true);
+    // If specific origins configured, check allowlist
     if (ALLOWED_ORIGINS.length > 0 && ALLOWED_ORIGINS[0] !== '*') {
-      if (ALLOWED_ORIGINS.includes(origin)) {
-        return callback(null, origin);
-      }
-      // Still allow the request but without credentials
-      return callback(null, true);
+      if (ALLOWED_ORIGINS.includes(origin)) return callback(null, origin);
     }
-    // Default: allow all origins (no credentials)
+    // Default: allow all origins
     return callback(null, true);
   },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
@@ -122,7 +116,6 @@ app.use(cors({
   // Only enable credentials when specific origins are configured
   credentials: ALLOWED_ORIGINS.length > 0 && ALLOWED_ORIGINS[0] !== '*',
 }));
-// Removed duplicate corsOptionsMiddleware - using single CORS strategy
 
 // Compression
 app.use(compression());
@@ -134,6 +127,9 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 // Request tracking
 app.use(requestIdMiddleware);
 app.use(requestLoggerMiddleware);
+
+// Metrics tracking for /health/metrics endpoint
+app.use(metricsMiddleware);
 
 // Serve public static files BEFORE maintenance mode (for XRPL metadata)
 // These must be accessible even during maintenance for token logo/metadata
@@ -158,14 +154,11 @@ app.use('/assets', express.static(path.join(publicPath, 'assets'), {
 // Maintenance mode - must be before other routes (but after static assets)
 app.use(maintenanceModeMiddleware);
 
-// API key authentication - MUST come before rate limiting
-// so that tier-based rate limits work correctly
-app.use(apiKeyAuthMiddleware);
-
-// Rate limiting - uses tier from auth middleware
-// If auth runs first, we get proper tier-based limits
-// Otherwise everyone gets default EXPLORER tier
+// Rate limiting
 app.use(rateLimitMiddleware);
+
+// API key authentication
+app.use(apiKeyAuthMiddleware);
 
 // Serve static UI files (frontend build)
 const uiPath = path.join(process.cwd(), 'frontend', 'dist');
