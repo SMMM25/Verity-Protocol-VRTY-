@@ -30,6 +30,7 @@
 - ✅ **Security Audit Fixes**: PRs #73-#81 merged (CORS, middleware order, logger, etc.)
 - ✅ **UI Fixes**: PRs #62-#72 merged (Tailwind v4, logo, banner, whitepaper)
 - ✅ **XRPL Meta**: TOML updated for XUMM logo display (PR #72)
+- ✅ **Transparency Monitor**: Verifiable solvency proofs & embeddable badges (NEW)
 
 ---
 
@@ -101,6 +102,7 @@ Verity Protocol is a **hybrid XRPL-based platform** combining:
 | `src/bridge/` | Cross-chain bridges |
 | `src/signals/` | Signals Protocol |
 | `src/guilds/` | Guild Treasury |
+| `src/transparency/` | **Transparency & Solvency Monitor** (NEW) |
 
 ### Operations Scripts
 | Script | Purpose | Status |
@@ -161,6 +163,7 @@ Verity Protocol is a **hybrid XRPL-based platform** combining:
 | #35 | Phase 5: Tokenized Assets Dashboard | 🟡 Open |
 | #62-#72 | UI Fixes (Tailwind, Logo, Banner, Whitepaper) | ✅ Merged |
 | #73-#81 | Backend Audit Fixes (Security/Ops) | ✅ Merged |
+| #82 | Transparency & Solvency Monitor | 🟡 Pending |
 
 ### DEX History
 - **2026-01-14**: Listed 1M VRTY @ 0.02 XRP (TX: `4F1FC1B2...`)
